@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"git-remote-confluence/internal/confluencetypes"
+	"github.com/hkwi/git-remote-confluence/internal/confluencetypes"
 )
 
 const DefaultBranch = "refs/heads/main"

@@ -8,9 +8,9 @@ import (
 	"sort"
 	"strings"
 
-	"git-remote-confluence/internal/confluence"
-	"git-remote-confluence/internal/gitrepo"
-	"git-remote-confluence/internal/pagefiles"
+	"github.com/hkwi/git-remote-confluence/internal/confluence"
+	"github.com/hkwi/git-remote-confluence/internal/gitrepo"
+	"github.com/hkwi/git-remote-confluence/internal/pagefiles"
 )
 
 type pushRef struct {

@@ -10,15 +10,35 @@ import (
 	"strconv"
 	"time"
 
-	"git-remote-confluence/internal/confluencetypes"
+	"github.com/hkwi/git-remote-confluence/internal/confluencetypes"
 )
 
-const userAgent = "git-remote-confluence/0.1"
+const appName = "git-remote-confluence"
+
+var userAgentVersion = "dev"
+
+func SetUserAgentVersion(version string) {
+	if version != "" {
+		userAgentVersion = version
+	}
+}
+
+func userAgent() string {
+	return appName + "/" + userAgentVersion
+}
+
+func clientUserAgent(c *Client) string {
+	if c.UserAgent != "" {
+		return c.UserAgent
+	}
+	return userAgent()
+}
 
 type Client struct {
 	BaseURL    string
 	PAT        string
 	HTTPClient *http.Client
+	UserAgent  string
 }
 
 type Page struct {
@@ -198,7 +218,7 @@ func (c *Client) getJSON(path string, values url.Values, target any) error {
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.PAT)
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", clientUserAgent(c))
 
 	client := c.HTTPClient
 	if client == nil {
@@ -237,7 +257,7 @@ func (c *Client) putJSON(path string, payload any, target any) error {
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.PAT)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", clientUserAgent(c))
 
 	client := c.HTTPClient
 	if client == nil {

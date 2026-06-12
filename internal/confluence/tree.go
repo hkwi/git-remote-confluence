@@ -3,7 +3,7 @@ package confluence
 import (
 	"sort"
 
-	"git-remote-confluence/internal/fastimport"
+	"github.com/hkwi/git-remote-confluence/internal/fastimport"
 )
 
 type ProgressFunc func(format string, args ...any)

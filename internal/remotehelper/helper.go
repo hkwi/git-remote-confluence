@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"git-remote-confluence/internal/confluence"
-	"git-remote-confluence/internal/fastimport"
+	"github.com/hkwi/git-remote-confluence/internal/confluence"
+	"github.com/hkwi/git-remote-confluence/internal/fastimport"
 )
 
 func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) error {

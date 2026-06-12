@@ -18,6 +18,9 @@ func TestUpdatePageSendsStoragePayload(t *testing.T) {
 		if r.Header.Get("Authorization") != "Bearer secret-token" {
 			t.Fatalf("authorization = %q", r.Header.Get("Authorization"))
 		}
+		if r.Header.Get("User-Agent") != "git-remote-confluence/v0.1.0" {
+			t.Fatalf("user-agent = %q", r.Header.Get("User-Agent"))
+		}
 
 		var payload map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -51,6 +54,7 @@ func TestUpdatePageSendsStoragePayload(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "secret-token")
+	client.UserAgent = "git-remote-confluence/v0.1.0"
 	err := client.UpdatePage(PageUpdate{
 		ID:            "1",
 		Title:         "吾輩は猫である",
@@ -61,6 +65,18 @@ func TestUpdatePageSendsStoragePayload(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestUserAgentUsesConfiguredVersion(t *testing.T) {
+	oldVersion := userAgentVersion
+	t.Cleanup(func() {
+		userAgentVersion = oldVersion
+	})
+
+	SetUserAgentVersion("v0.1.0")
+	if got, want := userAgent(), "git-remote-confluence/v0.1.0"; got != want {
+		t.Fatalf("userAgent() = %q, want %q", got, want)
 	}
 }
 

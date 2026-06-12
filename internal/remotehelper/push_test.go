@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"git-remote-confluence/internal/confluencetypes"
-	"git-remote-confluence/internal/fastimport"
+	"github.com/hkwi/git-remote-confluence/internal/confluencetypes"
+	"github.com/hkwi/git-remote-confluence/internal/fastimport"
 )
 
 func TestHelperPushUpdatesChangedPage(t *testing.T) {

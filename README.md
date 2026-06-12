@@ -84,6 +84,23 @@ This writes `./git-remote-confluence`. If `git --exec-path` already contains an
 older `git-remote-confluence`, replace that binary as well because Git may
 prefer helpers from its exec path over `PATH`.
 
+## Install
+
+Install the tagged release with Go:
+
+```sh
+go install github.com/hkwi/git-remote-confluence@v0.1.0
+```
+
+Prebuilt archives for Linux, macOS, and Windows are published on the GitHub
+Releases page. Each release includes `checksums.txt`.
+
+Check the installed binary:
+
+```sh
+git-remote-confluence version
+```
+
 ## Authentication
 
 The helper needs a Confluence personal access token. It reads the first value it
@@ -113,8 +130,8 @@ CONFLUENCE_PAT=... git clone --no-checkout \
   'confluence::https://confluence.example.com/pages/viewpage.action?pageId=123456789' \
   pages
 cd pages
-git config filter.confluence-storage.clean "/path/to/git-confluence/bin/git-confluence-filter clean"
-git config filter.confluence-storage.smudge "/path/to/git-confluence/bin/git-confluence-filter smudge"
+git config filter.confluence-storage.clean "/path/to/git-confluence/git-confluence clean"
+git config filter.confluence-storage.smudge "/path/to/git-confluence/git-confluence smudge"
 git config filter.confluence-storage.required true
 git checkout
 ```

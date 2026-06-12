@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"git-remote-confluence/internal/confluencetypes"
+	"github.com/hkwi/git-remote-confluence/internal/confluencetypes"
 )
 
 func TestBuildStreamContainsPageFiles(t *testing.T) {
