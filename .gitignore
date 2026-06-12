@@ -1,0 +1,4 @@
+/git-remote-confluence
+*.test
+coverage.out
+.cache/
