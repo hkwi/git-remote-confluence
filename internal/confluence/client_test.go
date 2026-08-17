@@ -80,6 +80,22 @@ func TestUserAgentUsesConfiguredVersion(t *testing.T) {
 	}
 }
 
+func TestClientUsesConfiguredAPIPath(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/custom/api/root/2.0/content/1" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		writeJSON(t, w, Page{ID: "1"})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "secret-token")
+	client.SetAPIPath("/custom/api/root/", "/2.0/")
+	if _, err := client.FetchPage("1"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func writeJSON(t *testing.T, w http.ResponseWriter, value any) {
 	t.Helper()
 	w.Header().Set("Content-Type", "application/json")

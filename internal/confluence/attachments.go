@@ -29,7 +29,7 @@ func (c *Client) FetchAttachments(pageID string) ([]Attachment, error) {
 		values.Set("limit", strconv.Itoa(limit))
 
 		var response attachmentListResponse
-		path := "/rest/api/content/" + url.PathEscape(pageID) + "/child/attachment"
+		path := c.apiPath("content/" + url.PathEscape(pageID) + "/child/attachment")
 		if err := c.getJSON(path, values, &response); err != nil {
 			return nil, err
 		}

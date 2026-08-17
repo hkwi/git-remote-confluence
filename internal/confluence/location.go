@@ -83,6 +83,35 @@ func ResolvePAT(remoteName string) string {
 	return ""
 }
 
+func ResolveAPIPath(remoteName string) (string, string) {
+	apiRoot := resolveRemoteSetting(remoteName, "apiRoot", "CONFLUENCE_API_ROOT", "GIT_REMOTE_CONFLUENCE_API_ROOT")
+	if apiRoot == "" {
+		apiRoot = defaultAPIRoot
+	}
+	apiVersion := resolveRemoteSetting(remoteName, "apiVersion", "CONFLUENCE_API_VERSION", "GIT_REMOTE_CONFLUENCE_API_VERSION")
+	return strings.Trim(apiRoot, "/"), strings.Trim(apiVersion, "/")
+}
+
+func resolveRemoteSetting(remoteName, configName string, envNames ...string) string {
+	for _, name := range envNames {
+		if value := os.Getenv(name); value != "" {
+			return value
+		}
+	}
+
+	var keys []string
+	if regexp.MustCompile(`^[A-Za-z0-9_.-]+$`).MatchString(remoteName) {
+		keys = append(keys, "remote."+remoteName+"."+configName)
+	}
+	keys = append(keys, "confluence."+configName, "remote.confluence."+configName)
+	for _, key := range keys {
+		if value := gitConfigGet(key); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 func stripTransportPrefix(rawURL string) string {
 	switch {
 	case strings.HasPrefix(rawURL, "confluence::"):

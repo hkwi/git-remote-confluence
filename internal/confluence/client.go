@@ -8,12 +8,14 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hkwi/git-remote-confluence/internal/confluencetypes"
 )
 
 const appName = "git-remote-confluence"
+const defaultAPIRoot = "rest/api"
 
 var userAgentVersion = "dev"
 
@@ -37,6 +39,8 @@ func clientUserAgent(c *Client) string {
 type Client struct {
 	BaseURL    string
 	PAT        string
+	APIRoot    string
+	APIVersion string
 	HTTPClient *http.Client
 	UserAgent  string
 }
@@ -94,15 +98,34 @@ func NewClient(baseURL, pat string) *Client {
 	return &Client{
 		BaseURL: baseURL,
 		PAT:     pat,
+		APIRoot: defaultAPIRoot,
 		HTTPClient: &http.Client{
 			Timeout: 60 * time.Second,
 		},
 	}
 }
 
+func (c *Client) SetAPIPath(apiRoot, apiVersion string) {
+	apiRoot = strings.Trim(apiRoot, "/")
+	if apiRoot == "" {
+		apiRoot = defaultAPIRoot
+	}
+	c.APIRoot = apiRoot
+	c.APIVersion = strings.Trim(apiVersion, "/")
+}
+
+func (c *Client) apiPath(resource string) string {
+	parts := []string{strings.Trim(c.APIRoot, "/")}
+	if c.APIVersion != "" {
+		parts = append(parts, strings.Trim(c.APIVersion, "/"))
+	}
+	parts = append(parts, strings.TrimLeft(resource, "/"))
+	return "/" + strings.Join(parts, "/")
+}
+
 func (c *Client) FetchPage(pageID string) (Page, error) {
 	var page Page
-	err := c.getJSON("/rest/api/content/"+url.PathEscape(pageID), commonExpand(), &page)
+	err := c.getJSON(c.apiPath("content/"+url.PathEscape(pageID)), commonExpand(), &page)
 	if err != nil {
 		return Page{}, err
 	}
@@ -113,7 +136,7 @@ func (c *Client) FetchPage(pageID string) (Page, error) {
 }
 
 func (c *Client) FetchChildren(pageID string) ([]Page, error) {
-	return c.paginated("/rest/api/content/"+url.PathEscape(pageID)+"/child/page", commonExpand())
+	return c.paginated(c.apiPath("content/"+url.PathEscape(pageID)+"/child/page"), commonExpand())
 }
 
 func (c *Client) FetchPageByTitle(spaceKey, title string) (Page, error) {
@@ -123,7 +146,7 @@ func (c *Client) FetchPageByTitle(spaceKey, title string) (Page, error) {
 	values.Set("type", "page")
 	values.Set("status", "current")
 
-	pages, err := c.paginated("/rest/api/content", values)
+	pages, err := c.paginated(c.apiPath("content"), values)
 	if err != nil {
 		return Page{}, err
 	}
@@ -144,7 +167,7 @@ func (c *Client) FetchSpacePages(spaceKey string) ([]Page, error) {
 	values.Set("spaceKey", spaceKey)
 	values.Set("type", "page")
 	values.Set("status", "current")
-	return c.paginated("/rest/api/content", values)
+	return c.paginated(c.apiPath("content"), values)
 }
 
 func (c *Client) UpdatePage(update PageUpdate) error {
@@ -179,7 +202,7 @@ func (c *Client) UpdatePage(update PageUpdate) error {
 	}
 
 	var page Page
-	return c.putJSON("/rest/api/content/"+url.PathEscape(update.ID), payload, &page)
+	return c.putJSON(c.apiPath("content/"+url.PathEscape(update.ID)), payload, &page)
 }
 
 func (c *Client) paginated(path string, baseValues url.Values) ([]Page, error) {
