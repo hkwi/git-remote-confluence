@@ -243,6 +243,34 @@ func (c *Client) getJSON(path string, values url.Values, target any) error {
 	return nil
 }
 
+func (c *Client) getBytes(requestURL string) ([]byte, error) {
+	req, err := http.NewRequest(http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.PAT)
+	req.Header.Set("User-Agent", clientUserAgent(c))
+
+	client := c.HTTPClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("Confluence attachment request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("Confluence attachment HTTP %d: %s", resp.StatusCode, string(body))
+	}
+	return body, nil
+}
+
 func (c *Client) putJSON(path string, payload any, target any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {

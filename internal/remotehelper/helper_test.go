@@ -55,6 +55,11 @@ func TestGitCloneFromMockConfluence(t *testing.T) {
 		t.Fatalf("child XML = %q", childXML)
 	}
 
+	attachment := readCloneFile(t, destination, "1", "attachments", "挿絵.png")
+	if string(attachment) != "PNG DATA\x00" {
+		t.Fatalf("attachment = %q", attachment)
+	}
+
 	metadata := readCloneFile(t, destination, "1.yml")
 	if !strings.Contains(string(metadata), `page_id: "1"`) || !strings.Contains(string(metadata), "number: 7") {
 		t.Fatalf("unexpected metadata:\n%s", metadata)
@@ -246,9 +251,20 @@ func mockConfluenceHandler(t *testing.T) http.Handler {
 			writeJSON(t, w, pages["1"])
 		case "/rest/api/content/1/child/page":
 			writeJSON(t, w, map[string]any{"results": []any{pages["2"]}, "size": 1, "limit": 100})
+		case "/rest/api/content/1/child/attachment":
+			writeJSON(t, w, map[string]any{"results": []any{map[string]any{
+				"id": "10", "title": "挿絵.png",
+				"extensions": map[string]any{"mediaType": "image/png"},
+				"version":    map[string]any{"number": 2},
+				"_links":     map[string]any{"download": "/download/attachments/1/%E6%8C%BF%E7%B5%B5.png"},
+			}}, "size": 1, "limit": 100})
+		case "/download/attachments/1/挿絵.png":
+			_, _ = w.Write([]byte("PNG DATA\x00"))
 		case "/rest/api/content/2":
 			writeJSON(t, w, pages["2"])
 		case "/rest/api/content/2/child/page":
+			writeJSON(t, w, map[string]any{"results": []any{}, "size": 0, "limit": 100})
+		case "/rest/api/content/2/child/attachment":
 			writeJSON(t, w, map[string]any{"results": []any{}, "size": 0, "limit": 100})
 		case "/rest/api/content":
 			if r.URL.Query().Get("spaceKey") != "ABC" {
