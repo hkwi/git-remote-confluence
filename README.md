@@ -1,9 +1,9 @@
 # git-remote-confluence
 
 `git-remote-confluence` is a Git remote helper that treats a Confluence page
-tree or space as a Git remote. It imports Confluence storage-format XML into a
-Git repository and can push committed body updates for existing pages back to
-Confluence.
+tree or space as a Git remote. It imports Confluence storage-format XML and
+attachments into a Git repository and can push committed body updates for
+existing pages back to Confluence.
 
 The helper is intentionally narrow: Confluence remains the system that owns page
 identity, hierarchy, version numbers, and storage-format XML. Git becomes the
@@ -63,6 +63,16 @@ Child pages are placed under their parent's page-id directory:
 123456789/123456790.md
 123456789/123456790.yml
 ```
+
+Attachments are downloaded below the page ID that owns them:
+
+```text
+123456789/attachments/diagram.png
+123456789/123456790/attachments/notes.pdf
+```
+
+Path separators and control characters in attachment names are replaced with
+underscores so an attachment cannot escape its page's `attachments` directory.
 
 The `.md` file is stored in Git as Confluence storage-format XML. With the
 `git-confluence` filter configured, it is checked out as Markdown and converted

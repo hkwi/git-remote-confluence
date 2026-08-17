@@ -21,16 +21,22 @@ type Location struct {
 }
 
 type PageRecord struct {
-	PageID     string
-	Title      string
-	Status     string
-	SpaceKey   string
-	ParentID   string
-	ChildIDs   []string
-	Version    confluencetypes.Version
-	Links      map[string]string
-	StorageXML string
-	PathDir    string
+	PageID      string
+	Title       string
+	Status      string
+	SpaceKey    string
+	ParentID    string
+	ChildIDs    []string
+	Version     confluencetypes.Version
+	Links       map[string]string
+	StorageXML  string
+	PathDir     string
+	Attachments []AttachmentRecord
+}
+
+type AttachmentRecord struct {
+	Path string
+	Data []byte
 }
 
 func (p PageRecord) ContentPath() string {
@@ -62,6 +68,9 @@ func BuildStreamWithProgress(branch string, location Location, pages []PageRecor
 	for _, page := range pages {
 		appendFile(&out, page.ContentPath(), []byte(page.StorageXML))
 		appendFile(&out, page.MetadataPath(), []byte(PageMetadataYAML(location, page)))
+		for _, attachment := range page.Attachments {
+			appendFile(&out, attachment.Path, attachment.Data)
+		}
 	}
 
 	out.WriteByte('\n')

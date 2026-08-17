@@ -1,7 +1,10 @@
 package confluence
 
 import (
+	"fmt"
 	"sort"
+	"strings"
+	"unicode"
 
 	"github.com/hkwi/git-remote-confluence/internal/fastimport"
 )
@@ -88,6 +91,11 @@ func fetchPageTree(client *Client, rootID string, progress ProgressFunc) ([]fast
 		report(progress, "page %s has %d child pages", pageID, len(childIDs))
 
 		record := pageRecord(page, parentID, childIDs, pathDir, client.BaseURL)
+		attachments, err := fetchAttachments(client, record, progress)
+		if err != nil {
+			return err
+		}
+		record.Attachments = attachments
 		records = append(records, record)
 
 		childPathDir := joinPath(pathDir, record.PageID)
@@ -144,25 +152,35 @@ func fetchSpaceTree(client *Client, spaceKey string, progress ProgressFunc) ([]f
 
 	var records []fastimport.PageRecord
 	seen := map[string]bool{}
-	var visit func(pageID, pathDir string)
-	visit = func(pageID, pathDir string) {
+	var visit func(pageID, pathDir string) error
+	visit = func(pageID, pathDir string) error {
 		if seen[pageID] {
-			return
+			return nil
 		}
 		seen[pageID] = true
 
 		page := byID[pageID]
 		record := pageRecord(page, parentByID[pageID], children[pageID], pathDir, client.BaseURL)
+		attachments, err := fetchAttachments(client, record, progress)
+		if err != nil {
+			return err
+		}
+		record.Attachments = attachments
 		records = append(records, record)
 
 		childPathDir := joinPath(pathDir, record.PageID)
 		for _, childID := range children[pageID] {
-			visit(childID, childPathDir)
+			if err := visit(childID, childPathDir); err != nil {
+				return err
+			}
 		}
+		return nil
 	}
 
 	for _, rootID := range children[""] {
-		visit(rootID, "")
+		if err := visit(rootID, ""); err != nil {
+			return nil, err
+		}
 	}
 
 	var ids []string
@@ -171,9 +189,54 @@ func fetchSpaceTree(client *Client, spaceKey string, progress ProgressFunc) ([]f
 	}
 	sort.Strings(ids)
 	for _, id := range ids {
-		visit(id, "")
+		if err := visit(id, ""); err != nil {
+			return nil, err
+		}
 	}
 	return records, nil
+}
+
+func fetchAttachments(client *Client, page fastimport.PageRecord, progress ProgressFunc) ([]fastimport.AttachmentRecord, error) {
+	attachments, err := client.FetchAttachments(page.PageID)
+	if err != nil {
+		return nil, fmt.Errorf("fetch attachments for page %s: %w", page.PageID, err)
+	}
+	report(progress, "page %s has %d attachments", page.PageID, len(attachments))
+
+	result := make([]fastimport.AttachmentRecord, 0, len(attachments))
+	usedPaths := map[string]bool{}
+	for _, attachment := range attachments {
+		data, err := client.DownloadAttachment(attachment)
+		if err != nil {
+			return nil, fmt.Errorf("download attachment %s (%q): %w", attachment.ID, attachment.Title, err)
+		}
+		name := safeAttachmentName(attachment.Title, attachment.ID)
+		path := joinPath(page.PathDir, page.PageID, "attachments", name)
+		if usedPaths[path] {
+			name = safeAttachmentName(attachment.ID+"-"+attachment.Title, attachment.ID)
+			path = joinPath(page.PathDir, page.PageID, "attachments", name)
+		}
+		usedPaths[path] = true
+		result = append(result, fastimport.AttachmentRecord{
+			Path: path,
+			Data: data,
+		})
+		report(progress, "downloaded attachment %s %s (%d bytes)", attachment.ID, attachment.Title, len(data))
+	}
+	return result, nil
+}
+
+func safeAttachmentName(title, id string) string {
+	name := strings.Map(func(r rune) rune {
+		if r == '/' || r == '\\' || unicode.IsControl(r) {
+			return '_'
+		}
+		return r
+	}, title)
+	if name == "" || name == "." || name == ".." {
+		name = "attachment-" + id
+	}
+	return name
 }
 
 func report(progress ProgressFunc, format string, args ...any) {
