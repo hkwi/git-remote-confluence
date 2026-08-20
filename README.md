@@ -2,8 +2,10 @@
 
 `git-remote-confluence` is a Git remote helper that treats a Confluence page
 tree or space as a Git remote. It imports Confluence storage-format XML and
-attachments into a Git repository and can push committed body updates for
-existing pages back to Confluence.
+attachment metadata pointers into a Git repository. The optional
+`git-confluence` filter materializes page Markdown and attachment bytes in the
+working tree. The helper can push committed body updates for existing pages
+back to Confluence.
 
 The helper is intentionally narrow: Confluence remains the system that owns page
 identity, hierarchy, version numbers, and storage-format XML. Git becomes the
@@ -23,17 +25,22 @@ content changed, checks the Confluence version and storage hash, and updates the
 existing Confluence page body. It refuses to overwrite a page when Confluence no
 longer matches the imported metadata.
 
-Create, delete, move, title, and attachment changes are not pushed yet.
+Git stores each attachment as a small text pointer containing its Confluence
+identity and current version. Clone and fetch therefore do not download
+attachment bytes. With the `git-confluence` filter configured, checkout
+downloads the version named by the pointer and exposes it as a normal working
+file. Create, delete, move, title, and attachment changes are not pushed yet.
 
 ## Working With Markdown
 
 Confluence storage-format XML is the synchronized content format. The companion
-`git-confluence` clean/smudge filter makes that practical for day-to-day
-editing:
+`git-confluence` filter makes pages and attachments practical for day-to-day
+use:
 
 - Git stores each page body as Confluence storage-format XML.
 - The working tree can show the same file as Markdown on checkout.
 - `git add` can convert the edited Markdown back to Confluence storage XML.
+- Git stores attachment pointers and can materialize their bytes on checkout.
 
 That gives users Markdown editing while preserving the storage XML that
 Confluence needs for reliable import and push.
@@ -41,10 +48,17 @@ Confluence needs for reliable import and push.
 The imported repository includes this `.gitattributes` entry:
 
 ```gitattributes
-*.md filter=confluence-storage diff=markdown
+*.md filter=confluence diff=markdown
+**/attachments/** filter=confluence -text
 ```
 
-Configure the `git-confluence` filter before checking out imported files.
+Without the filter, checkout leaves storage XML and attachment pointers intact.
+This is the lightweight default for agents and offline use. Configure the
+filter once with `git confluence install --global` to expose Markdown and
+attachment bytes for normal human use.
+
+The `install` subcommand registers the unified clean/smudge driver in Git
+configuration. It does not install the executable or download attachments.
 
 ## Repository Layout
 
@@ -64,7 +78,7 @@ Child pages are placed under their parent's page-id directory:
 123456789/123456790.yml
 ```
 
-Attachments are downloaded below the page ID that owns them:
+Attachments use their normal filenames below the page ID that owns them:
 
 ```text
 123456789/attachments/diagram.png
@@ -73,6 +87,12 @@ Attachments are downloaded below the page ID that owns them:
 
 Path separators and control characters in attachment names are replaced with
 underscores so an attachment cannot escape its page's `attachments` directory.
+Git stores a canonical text pointer at each attachment path. The pointer records
+the source site, page ID, attachment ID, version, filename, size, media type,
+and stable download path. It contains no token and no attachment bytes. The
+configured filter replaces the pointer with that version's bytes in the working
+tree and restores the same pointer on `git add`. Locally modified attachment
+bytes are rejected because attachment push is not supported yet.
 
 The `.md` file is stored in Git as Confluence storage-format XML. With the
 `git-confluence` filter configured, it is checked out as Markdown and converted
@@ -124,10 +144,11 @@ finds from:
 
 ## Clone
 
-If the `git-confluence` filter is already configured globally, clone with Git's
-explicit remote-helper syntax:
+For human-oriented working trees, configure the unified page and attachment
+filter once, then clone with Git's explicit remote-helper syntax:
 
 ```sh
+git confluence install --global
 CONFLUENCE_PAT=... git clone \
   'confluence::https://confluence.example.com/pages/viewpage.action?pageId=123456789'
 ```
@@ -140,14 +161,32 @@ CONFLUENCE_PAT=... git clone --no-checkout \
   'confluence::https://confluence.example.com/pages/viewpage.action?pageId=123456789' \
   pages
 cd pages
-git config filter.confluence-storage.clean "/path/to/git-confluence/git-confluence clean"
-git config filter.confluence-storage.smudge "/path/to/git-confluence/git-confluence smudge"
-git config filter.confluence-storage.required true
+git confluence install --local
 git checkout
 ```
 
+To keep attachment pointers during checkout while still converting pages, set
+the skip-smudge variable for that command:
+
+```sh
+GIT_CONFLUENCE_SKIP_SMUDGE=1 git checkout
+```
+
+Afterward, materialize all or selected attachments explicitly:
+
+```sh
+git confluence pull
+git confluence pull 123456789/attachments/diagram.png
+```
+
 The remote URL may identify a page by `pageId`, a display page URL, or a
-Confluence space.
+Confluence space. A URL containing both `pageId` and `attachmentId` can still be
+cloned directly when a standalone repository containing the attachment's full
+binary version history is required.
+
+For Confluence Data Center, attachment history is read by following
+`history.previousVersion` through historical content responses. The helper does
+not require a `GET /content/{id}/version` listing endpoint.
 
 ## REST API Path
 

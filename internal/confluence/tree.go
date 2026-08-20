@@ -2,6 +2,7 @@ package confluence
 
 import (
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 	"unicode"
@@ -206,10 +207,6 @@ func fetchAttachments(client *Client, page fastimport.PageRecord, progress Progr
 	result := make([]fastimport.AttachmentRecord, 0, len(attachments))
 	usedPaths := map[string]bool{}
 	for _, attachment := range attachments {
-		data, err := client.DownloadAttachment(attachment)
-		if err != nil {
-			return nil, fmt.Errorf("download attachment %s (%q): %w", attachment.ID, attachment.Title, err)
-		}
 		name := safeAttachmentName(attachment.Title, attachment.ID)
 		path := joinPath(page.PathDir, page.PageID, "attachments", name)
 		if usedPaths[path] {
@@ -217,13 +214,115 @@ func fetchAttachments(client *Client, page fastimport.PageRecord, progress Progr
 			path = joinPath(page.PathDir, page.PageID, "attachments", name)
 		}
 		usedPaths[path] = true
+		pointer, err := attachmentPointer(client.BaseURL, page.PageID, attachment)
+		if err != nil {
+			return nil, fmt.Errorf("build pointer for attachment %s (%q): %w", attachment.ID, attachment.Title, err)
+		}
 		result = append(result, fastimport.AttachmentRecord{
-			Path: path,
-			Data: data,
+			ID:      attachment.ID,
+			Title:   name,
+			Path:    path,
+			Pointer: pointer,
 		})
-		report(progress, "downloaded attachment %s %s (%d bytes)", attachment.ID, attachment.Title, len(data))
+		report(progress, "recorded attachment pointer %s %s version %d", attachment.ID, attachment.Title, attachment.Version.Number)
 	}
 	return result, nil
+}
+
+const attachmentPointerVersion = "https://github.com/hkwi/git-remote-confluence/spec/attachment/v1"
+
+func attachmentPointer(baseURL, pageID string, attachment Attachment) ([]byte, error) {
+	if attachment.ID == "" {
+		return nil, fmt.Errorf("attachment id is required")
+	}
+	if attachment.Version.Number <= 0 {
+		return nil, fmt.Errorf("attachment version is required")
+	}
+	downloadPath, err := stableDownloadPath(baseURL, attachment.Links["download"])
+	if err != nil {
+		return nil, err
+	}
+	filename := safeAttachmentName(attachment.Title, attachment.ID)
+	var pointer strings.Builder
+	fmt.Fprintf(&pointer, "version %s\n", attachmentPointerVersion)
+	fmt.Fprintf(&pointer, "source %s\n", strings.TrimRight(baseURL, "/"))
+	fmt.Fprintf(&pointer, "page-id %s\n", pageID)
+	fmt.Fprintf(&pointer, "attachment-id %s\n", attachment.ID)
+	fmt.Fprintf(&pointer, "attachment-version %d\n", attachment.Version.Number)
+	fmt.Fprintf(&pointer, "filename %s\n", filename)
+	fmt.Fprintf(&pointer, "size %d\n", attachment.Extensions.FileSize)
+	if attachment.Extensions.MediaType != "" {
+		fmt.Fprintf(&pointer, "media-type %s\n", attachment.Extensions.MediaType)
+	}
+	fmt.Fprintf(&pointer, "download-path %s\n", downloadPath)
+	return []byte(pointer.String()), nil
+}
+
+func stableDownloadPath(baseURL, download string) (string, error) {
+	if download == "" {
+		return "", fmt.Errorf("download link is required")
+	}
+	base, err := url.Parse(strings.TrimRight(baseURL, "/") + "/")
+	if err != nil {
+		return "", fmt.Errorf("invalid Confluence base URL: %w", err)
+	}
+	link, err := url.Parse(download)
+	if err != nil {
+		return "", fmt.Errorf("invalid download link: %w", err)
+	}
+	resolved := base.ResolveReference(link)
+	if resolved.Scheme != base.Scheme || resolved.Host != base.Host {
+		return "", fmt.Errorf("download link points outside Confluence origin")
+	}
+	query := resolved.Query()
+	stableQuery := url.Values{}
+	if api := query.Get("api"); api != "" {
+		stableQuery.Set("api", api)
+	}
+	resolved.RawQuery = stableQuery.Encode()
+	resolved.Fragment = ""
+	path := resolved.EscapedPath()
+	if path == "" || !strings.HasPrefix(path, "/") {
+		return "", fmt.Errorf("download link has no absolute path")
+	}
+	if resolved.RawQuery != "" {
+		path += "?" + resolved.RawQuery
+	}
+	return path, nil
+}
+
+func FetchAttachmentRepository(client *Client, attachmentID string, progress ProgressFunc) (fastimport.AttachmentRecord, error) {
+	report(progress, "fetching attachment %s", attachmentID)
+	attachment, err := client.FetchAttachment(attachmentID)
+	if err != nil {
+		return fastimport.AttachmentRecord{}, fmt.Errorf("fetch attachment %s: %w", attachmentID, err)
+	}
+	return fetchAttachmentRecord(client, attachment, "", progress)
+}
+
+func fetchAttachmentRecord(client *Client, attachment Attachment, path string, progress ProgressFunc) (fastimport.AttachmentRecord, error) {
+	versions, err := client.FetchAttachmentVersions(attachment)
+	if err != nil {
+		return fastimport.AttachmentRecord{}, fmt.Errorf("fetch versions for attachment %s (%q): %w", attachment.ID, attachment.Title, err)
+	}
+	if len(versions) == 0 {
+		return fastimport.AttachmentRecord{}, fmt.Errorf("Confluence attachment %s (%q) has no versions", attachment.ID, attachment.Title)
+	}
+
+	record := fastimport.AttachmentRecord{
+		ID:    attachment.ID,
+		Title: safeAttachmentName(attachment.Title, attachment.ID),
+		Path:  path,
+	}
+	for _, version := range versions {
+		data, err := client.DownloadAttachmentVersion(attachment, version.Number)
+		if err != nil {
+			return fastimport.AttachmentRecord{}, fmt.Errorf("download attachment %s (%q) version %d: %w", attachment.ID, attachment.Title, version.Number, err)
+		}
+		record.Versions = append(record.Versions, fastimport.AttachmentVersionRecord{Version: version, Data: data})
+		report(progress, "downloaded attachment %s %s version %d (%d bytes)", attachment.ID, attachment.Title, version.Number, len(data))
+	}
+	return record, nil
 }
 
 func safeAttachmentName(title, id string) string {

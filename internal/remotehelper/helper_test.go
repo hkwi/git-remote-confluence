@@ -9,11 +9,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
 func TestGitCloneFromMockConfluence(t *testing.T) {
-	server := httptest.NewServer(mockConfluenceHandler(t))
+	var attachmentDownloads atomic.Int32
+	server := httptest.NewServer(mockConfluenceHandler(t, &attachmentDownloads))
 	defer server.Close()
 
 	tmp := t.TempDir()
@@ -23,18 +25,18 @@ func TestGitCloneFromMockConfluence(t *testing.T) {
 	if err := os.Mkdir(binDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	helperPath := filepath.Join(binDir, "git-remote-confluence-test")
+	helperPath := filepath.Join(binDir, "git-remote-confluence")
 	build := exec.Command("go", "build", "-o", helperPath, ".")
 	build.Dir = root
 	build.Env = append(os.Environ(), "GOCACHE="+filepath.Join(tmp, "gocache"))
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("go build failed: %v\n%s", err, output)
 	}
-
-	cmd := exec.Command("git", "clone", "--progress", "--verbose", "confluence-test::"+server.URL+"/pages/viewpage.action?pageId=1", destination)
+	cmd := exec.Command("git", "clone", "--progress", "--verbose", "confluence::"+server.URL+"/pages/viewpage.action?pageId=1", destination)
 	cmd.Dir = tmp
 	cmd.Env = append(os.Environ(),
 		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"GIT_EXEC_PATH="+binDir,
 		"CONFLUENCE_PAT=secret-token",
 		"NO_PROXY=127.0.0.1,localhost",
 		"no_proxy=127.0.0.1,localhost",
@@ -56,8 +58,19 @@ func TestGitCloneFromMockConfluence(t *testing.T) {
 	}
 
 	attachment := readCloneFile(t, destination, "1", "attachments", "挿絵.png")
-	if string(attachment) != "PNG DATA\x00" {
-		t.Fatalf("attachment = %q", attachment)
+	for _, want := range []string{
+		"attachment-id 10\n",
+		"attachment-version 2\n",
+		"size 9\n",
+		"media-type image/png\n",
+		"download-path /download/attachments/1/%E6%8C%BF%E7%B5%B5.png\n",
+	} {
+		if !strings.Contains(string(attachment), want) {
+			t.Fatalf("attachment pointer missing %q:\n%s", want, attachment)
+		}
+	}
+	if attachmentDownloads.Load() != 0 {
+		t.Fatalf("page clone downloaded attachment %d times", attachmentDownloads.Load())
 	}
 
 	metadata := readCloneFile(t, destination, "1.yml")
@@ -66,7 +79,7 @@ func TestGitCloneFromMockConfluence(t *testing.T) {
 	}
 
 	attributes := readCloneFile(t, destination, ".gitattributes")
-	if string(attributes) != "*.md filter=confluence-storage diff=markdown\n" {
+	if string(attributes) != "*.md filter=confluence diff=markdown\n**/attachments/** filter=confluence -text\n" {
 		t.Fatalf("unexpected attributes:\n%s", attributes)
 	}
 
@@ -75,7 +88,7 @@ func TestGitCloneFromMockConfluence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("git check-attr failed: %v\n%s", err, output)
 	}
-	if !strings.Contains(string(output), "filter: confluence-storage") {
+	if !strings.Contains(string(output), "filter: confluence") {
 		t.Fatalf("filter attribute missing:\n%s", output)
 	}
 }
@@ -121,7 +134,7 @@ func listWorktree(t *testing.T, root string) string {
 }
 
 func TestHelperProgressOutput(t *testing.T) {
-	server := httptest.NewServer(mockConfluenceHandler(t))
+	server := httptest.NewServer(mockConfluenceHandler(t, nil))
 	defer server.Close()
 	t.Setenv("CONFLUENCE_PAT", "secret-token")
 	t.Setenv("NO_PROXY", "127.0.0.1,localhost")
@@ -160,8 +173,27 @@ func TestHelperProgressOutput(t *testing.T) {
 	}
 }
 
+func TestAttachmentRemoteIsReadOnly(t *testing.T) {
+	var stdout bytes.Buffer
+	err := Main(
+		[]string{"origin", "confluence::https://cf.example.test/pages/viewpage.action?attachmentId=10&pageId=1"},
+		strings.NewReader("capabilities\n\n"),
+		&stdout,
+		&bytes.Buffer{},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(stdout.String(), "push\n") {
+		t.Fatalf("attachment remote advertised push:\n%s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "import\n") {
+		t.Fatalf("attachment remote did not advertise import:\n%s", stdout.String())
+	}
+}
+
 func TestHelperResolvesDisplayPageURL(t *testing.T) {
-	server := httptest.NewServer(mockConfluenceHandler(t))
+	server := httptest.NewServer(mockConfluenceHandler(t, nil))
 	defer server.Close()
 	t.Setenv("CONFLUENCE_PAT", "secret-token")
 	t.Setenv("NO_PROXY", "127.0.0.1,localhost")
@@ -206,7 +238,7 @@ func TestHelperResolvesDisplayPageURL(t *testing.T) {
 	}
 }
 
-func mockConfluenceHandler(t *testing.T) http.Handler {
+func mockConfluenceHandler(t *testing.T, attachmentDownloads *atomic.Int32) http.Handler {
 	t.Helper()
 	pages := map[string]map[string]any{
 		"1": {
@@ -254,12 +286,42 @@ func mockConfluenceHandler(t *testing.T) http.Handler {
 		case "/rest/api/content/1/child/attachment":
 			writeJSON(t, w, map[string]any{"results": []any{map[string]any{
 				"id": "10", "title": "挿絵.png",
-				"extensions": map[string]any{"mediaType": "image/png"},
-				"version":    map[string]any{"number": 2},
-				"_links":     map[string]any{"download": "/download/attachments/1/%E6%8C%BF%E7%B5%B5.png"},
+				"extensions": map[string]any{"mediaType": "image/png", "fileSize": 9},
+				"version": map[string]any{
+					"number": 2, "when": "2025-01-02T03:04:05.000Z",
+				},
+				"history": map[string]any{
+					"previousVersion": map[string]any{"number": 1, "when": "2025-01-01T03:04:05.000Z"},
+				},
+				"_links": map[string]any{"download": "/download/attachments/1/%E6%8C%BF%E7%B5%B5.png"},
 			}}, "size": 1, "limit": 100})
+		case "/rest/api/content/10":
+			if r.URL.Query().Get("status") == "historical" && r.URL.Query().Get("version") == "1" {
+				writeJSON(t, w, map[string]any{
+					"id": "10", "type": "attachment", "status": "historical", "title": "挿絵.png",
+					"version": map[string]any{"number": 1, "when": "2025-01-01T03:04:05.000Z"},
+					"history": map[string]any{},
+					"_links":  map[string]any{"download": "/download/attachments/1/%E6%8C%BF%E7%B5%B5.png"},
+				})
+				return
+			}
+			writeJSON(t, w, map[string]any{
+				"id": "10", "type": "attachment", "title": "挿絵.png",
+				"version": map[string]any{"number": 2, "when": "2025-01-02T03:04:05.000Z"},
+				"history": map[string]any{
+					"previousVersion": map[string]any{"number": 1, "when": "2025-01-01T03:04:05.000Z"},
+				},
+				"_links": map[string]any{"download": "/download/attachments/1/%E6%8C%BF%E7%B5%B5.png"},
+			})
 		case "/download/attachments/1/挿絵.png":
-			_, _ = w.Write([]byte("PNG DATA\x00"))
+			if attachmentDownloads != nil {
+				attachmentDownloads.Add(1)
+			}
+			if r.URL.Query().Get("version") == "1" {
+				_, _ = w.Write([]byte("OLD PNG DATA\x00"))
+			} else {
+				_, _ = w.Write([]byte("PNG DATA\x00"))
+			}
 		case "/rest/api/content/2":
 			writeJSON(t, w, pages["2"])
 		case "/rest/api/content/2/child/page":

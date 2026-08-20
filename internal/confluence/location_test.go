@@ -31,6 +31,20 @@ func TestParseLocationSpaceURL(t *testing.T) {
 	}
 }
 
+func TestParseLocationAttachmentURL(t *testing.T) {
+	remoteURL := AttachmentRemoteURL("https://cf.example.test/wiki", "123", "456")
+	location, err := ParseLocation(remoteURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if location.BaseURL != "https://cf.example.test/wiki" {
+		t.Fatalf("base URL = %q", location.BaseURL)
+	}
+	if location.RootType != "attachment" || location.RootValue != "456" {
+		t.Fatalf("root = %s %s", location.RootType, location.RootValue)
+	}
+}
+
 func TestParseLocationDisplayPageURL(t *testing.T) {
 	location, err := ParseLocation("confluence:https://cf.example.test/display/ABC/%E5%90%BE%E8%BC%A9%E3%81%AF%E7%8C%AB%E3%81%A7%E3%81%82%E3%82%8B")
 	if err != nil {

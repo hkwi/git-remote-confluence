@@ -13,7 +13,7 @@ import (
 
 const DefaultBranch = "refs/heads/main"
 const AttributesPath = ".gitattributes"
-const AttributesContent = "*.md filter=confluence-storage diff=markdown\n"
+const AttributesContent = "*.md filter=confluence diff=markdown\n**/attachments/** filter=confluence -text\n"
 
 type Location struct {
 	RootType  string
@@ -35,8 +35,16 @@ type PageRecord struct {
 }
 
 type AttachmentRecord struct {
-	Path string
-	Data []byte
+	ID       string
+	Title    string
+	Path     string
+	Pointer  []byte
+	Versions []AttachmentVersionRecord
+}
+
+type AttachmentVersionRecord struct {
+	Version confluencetypes.Version
+	Data    []byte
 }
 
 func (p PageRecord) ContentPath() string {
@@ -69,7 +77,7 @@ func BuildStreamWithProgress(branch string, location Location, pages []PageRecor
 		appendFile(&out, page.ContentPath(), []byte(page.StorageXML))
 		appendFile(&out, page.MetadataPath(), []byte(PageMetadataYAML(location, page)))
 		for _, attachment := range page.Attachments {
-			appendFile(&out, attachment.Path, attachment.Data)
+			appendFile(&out, attachment.Path, attachment.Pointer)
 		}
 	}
 
@@ -79,6 +87,38 @@ func BuildStreamWithProgress(branch string, location Location, pages []PageRecor
 	}
 	out.WriteString("done\n")
 	return out.Bytes()
+}
+
+func BuildAttachmentStream(branch string, attachment AttachmentRecord) []byte {
+	var out bytes.Buffer
+	appendAttachmentCommits(&out, branch, attachment, 1)
+	out.WriteString("done\n")
+	return out.Bytes()
+}
+
+func appendAttachmentCommits(out *bytes.Buffer, ref string, attachment AttachmentRecord, nextMark int) (int, int) {
+	previousMark := 0
+	for _, record := range attachment.Versions {
+		mark := nextMark
+		nextMark++
+		fmt.Fprintf(out, "commit %s\n", ref)
+		fmt.Fprintf(out, "mark :%d\n", mark)
+		fmt.Fprintf(out, "committer Confluence <confluence@example.invalid> %d +0000\n", versionTimestamp(record.Version))
+		appendData(out, []byte(attachmentCommitMessage(attachment, record.Version)))
+		if previousMark == 0 {
+			out.WriteString("deleteall\n")
+		} else {
+			fmt.Fprintf(out, "from :%d\n", previousMark)
+		}
+		appendFile(out, attachment.Title, record.Data)
+		out.WriteByte('\n')
+		previousMark = mark
+	}
+	return previousMark, nextMark
+}
+
+func attachmentCommitMessage(attachment AttachmentRecord, version confluencetypes.Version) string {
+	return fmt.Sprintf("Import Confluence attachment %s version %d\n", attachment.ID, version.Number)
 }
 
 func SelectBranch(refs []string) string {
@@ -168,6 +208,17 @@ func commitTimestamp(pages []PageRecord) int64 {
 		}
 	}
 	return max
+}
+
+func versionTimestamp(version confluencetypes.Version) int64 {
+	if version.When == "" {
+		return 0
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, version.When)
+	if err != nil {
+		return 0
+	}
+	return parsed.Unix()
 }
 
 func joinPath(parts ...string) string {
