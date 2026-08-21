@@ -32,6 +32,9 @@ func ParseLocation(rawURL string) (Location, error) {
 	}
 
 	query := parsed.Query()
+	if attachmentID := firstQuery(query, "attachmentId", "attachmentid"); attachmentID != "" && isDigits(attachmentID) {
+		return Location{BaseURL: baseURL(parsed), RootType: "attachment", RootValue: attachmentID, OriginalURL: original}, nil
+	}
 	if pageID := firstQuery(query, "pageId", "pageid", "id"); pageID != "" && isDigits(pageID) {
 		return Location{BaseURL: baseURL(parsed), RootType: "page", RootValue: pageID, OriginalURL: original}, nil
 	}
@@ -59,7 +62,14 @@ func ParseLocation(rawURL string) (Location, error) {
 		return Location{BaseURL: baseURL(parsed), RootType: "space", RootValue: spaceKey, OriginalURL: original}, nil
 	}
 
-	return Location{}, fmt.Errorf("remote URL must identify a pageId or a Confluence space")
+	return Location{}, fmt.Errorf("remote URL must identify a pageId, attachmentId, or a Confluence space")
+}
+
+func AttachmentRemoteURL(baseURL, pageID, attachmentID string) string {
+	values := url.Values{}
+	values.Set("pageId", pageID)
+	values.Set("attachmentId", attachmentID)
+	return "confluence::" + strings.TrimRight(baseURL, "/") + "/pages/viewpage.action?" + values.Encode()
 }
 
 func ResolvePAT(remoteName string) string {

@@ -4,11 +4,13 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 
 	"github.com/hkwi/git-remote-confluence/internal/confluence"
 	"github.com/hkwi/git-remote-confluence/internal/fastimport"
+	"github.com/hkwi/git-remote-confluence/internal/logging"
 )
 
 func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
@@ -24,7 +26,7 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		remoteURL:  remoteURL,
 		in:         bufio.NewReader(stdin),
 		out:        stdout,
-		err:        progressOut,
+		logger:     logging.New(progressOut),
 		verbosity:  1,
 		progress:   true,
 	}).serve()
@@ -35,7 +37,7 @@ type helper struct {
 	remoteURL  string
 	in         *bufio.Reader
 	out        io.Writer
-	err        io.Writer
+	logger     *slog.Logger
 	verbosity  int
 	progress   bool
 }
@@ -55,7 +57,7 @@ func (h *helper) serve() error {
 
 		switch {
 		case line == "capabilities":
-			if _, err := io.WriteString(h.out, "import\npush\noption\nrefspec refs/heads/*:refs/heads/*\n\n"); err != nil {
+			if _, err := io.WriteString(h.out, h.capabilities()); err != nil {
 				return err
 			}
 		case line == "list":
@@ -86,6 +88,14 @@ func (h *helper) serve() error {
 			return fmt.Errorf("unsupported remote-helper command: %s", line)
 		}
 	}
+}
+
+func (h *helper) capabilities() string {
+	location, err := confluence.ParseLocation(h.remoteURL)
+	if err == nil && location.RootType == "attachment" {
+		return "import\noption\nrefspec refs/heads/*:refs/heads/*\n\n"
+	}
+	return "import\npush\noption\nrefspec refs/heads/*:refs/heads/*\n\n"
 }
 
 func (h *helper) handleOption(line string) error {
@@ -144,6 +154,9 @@ func (h *helper) runImport(refs []string) error {
 	if err != nil {
 		return err
 	}
+	if location.RootType == "attachment" {
+		return h.runAttachmentImport(refs, location, client)
+	}
 	location, err = confluence.ResolveLocation(client, location, h.reportProgress)
 	if err != nil {
 		return err
@@ -173,6 +186,22 @@ func (h *helper) runImport(refs []string) error {
 	return err
 }
 
+func (h *helper) runAttachmentImport(refs []string, location confluence.Location, client *confluence.Client) error {
+	h.reportProgress("root attachment %s at %s", location.RootValue, location.BaseURL)
+	attachment, err := confluence.FetchAttachmentRepository(client, location.RootValue, h.reportProgress)
+	if err != nil {
+		return err
+	}
+	stream := fastimport.BuildAttachmentStream(fastimport.SelectBranch(refs), attachment)
+	h.reportProgress("importing attachment %s with %d versions", attachment.ID, len(attachment.Versions))
+	h.reportProgress("writing %d bytes to git fast-import", len(stream))
+	_, err = h.out.Write(stream)
+	if err == nil {
+		h.reportProgress("done")
+	}
+	return err
+}
+
 func (h *helper) confluenceClient() (confluence.Location, *confluence.Client, error) {
 	location, err := confluence.ParseLocation(h.remoteURL)
 	if err != nil {
@@ -191,10 +220,10 @@ func (h *helper) confluenceClient() (confluence.Location, *confluence.Client, er
 }
 
 func (h *helper) reportProgress(format string, args ...any) {
-	if h.err == nil || !h.showProgress() {
+	if h.logger == nil || !h.showProgress() {
 		return
 	}
-	fmt.Fprintf(h.err, "confluence: "+format+"\n", args...)
+	h.logger.Info(fmt.Sprintf(format, args...), "app", "git-remote-confluence")
 }
 
 func (h *helper) showProgress() bool {

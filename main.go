@@ -6,6 +6,7 @@ import (
 	"runtime/debug"
 
 	"github.com/hkwi/git-remote-confluence/internal/confluence"
+	"github.com/hkwi/git-remote-confluence/internal/logging"
 	"github.com/hkwi/git-remote-confluence/internal/remotehelper"
 )
 
@@ -29,7 +30,7 @@ func main() {
 
 	confluence.SetUserAgentVersion(releaseVersion())
 	if err := remotehelper.Main(args, os.Stdin, os.Stdout, os.Stderr); err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %v\n", appName, err)
+		logging.New(os.Stderr).Error(err.Error(), "app", appName)
 		os.Exit(1)
 	}
 }

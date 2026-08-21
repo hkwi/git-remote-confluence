@@ -3,8 +3,41 @@ package confluence
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
+
+func TestAttachmentPointerUsesStableMetadata(t *testing.T) {
+	pointer, err := attachmentPointer("https://cf.example.test/wiki", "123", Attachment{
+		ID:         "456",
+		Title:      "diagram one.png",
+		Version:    Version{Number: 7},
+		Extensions: AttachmentExtensions{FileSize: 42, MediaType: "image/png"},
+		Links: map[string]string{
+			"download": "/wiki/download/attachments/123/diagram%20one.png?version=7&modificationDate=99&api=v2",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(pointer)
+	for _, want := range []string{
+		"version: https://github.com/hkwi/git-remote-confluence/spec/attachment/v1\n",
+		"attachment_id: \"456\"\n",
+		"attachment_version: 7\n",
+		"filename: diagram one.png\n",
+		"size: 42\n",
+		"media_type: image/png\n",
+		"download_path: /wiki/download/attachments/123/diagram%20one.png?api=v2\n",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("pointer missing %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "modificationDate") {
+		t.Fatalf("pointer retained volatile download query:\n%s", text)
+	}
+}
 
 func TestSafeAttachmentName(t *testing.T) {
 	tests := []struct {
