@@ -25,7 +25,7 @@ content changed, checks the Confluence version and storage hash, and updates the
 existing Confluence page body. It refuses to overwrite a page when Confluence no
 longer matches the imported metadata.
 
-Git stores each attachment as a small text pointer containing its Confluence
+Git stores each attachment as a small YAML pointer containing its Confluence
 identity and current version. Clone and fetch therefore do not download
 attachment bytes. With the `git-confluence` filter configured, checkout
 downloads the version named by the pointer and exposes it as a normal working
@@ -87,12 +87,26 @@ Attachments use their normal filenames below the page ID that owns them:
 
 Path separators and control characters in attachment names are replaced with
 underscores so an attachment cannot escape its page's `attachments` directory.
-Git stores a canonical text pointer at each attachment path. The pointer records
+Git stores a canonical YAML pointer at each attachment path. The pointer records
 the source site, page ID, attachment ID, version, filename, size, media type,
 and stable download path. It contains no token and no attachment bytes. The
 configured filter replaces the pointer with that version's bytes in the working
 tree and restores the same pointer on `git add`. Locally modified attachment
 bytes are rejected because attachment push is not supported yet.
+
+Attachment pointers use the `attachment/v1` YAML schema. For example:
+
+```yaml
+version: https://github.com/hkwi/git-remote-confluence/spec/attachment/v1
+source: https://confluence.example.com
+page_id: "123456789"
+attachment_id: "987654321"
+attachment_version: 3
+filename: diagram.png
+size: 42000
+media_type: image/png
+download_path: /download/attachments/123456789/diagram.png
+```
 
 The `.md` file is stored in Git as Confluence storage-format XML. With the
 `git-confluence` filter configured, it is checked out as Markdown and converted

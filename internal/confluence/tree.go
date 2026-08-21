@@ -7,6 +7,8 @@ import (
 	"strings"
 	"unicode"
 
+	"go.yaml.in/yaml/v3"
+
 	"github.com/hkwi/git-remote-confluence/internal/fastimport"
 )
 
@@ -231,6 +233,18 @@ func fetchAttachments(client *Client, page fastimport.PageRecord, progress Progr
 
 const attachmentPointerVersion = "https://github.com/hkwi/git-remote-confluence/spec/attachment/v1"
 
+type attachmentPointerYAML struct {
+	Version           string `yaml:"version"`
+	SourceURL         string `yaml:"source"`
+	PageID            string `yaml:"page_id"`
+	AttachmentID      string `yaml:"attachment_id"`
+	AttachmentVersion int    `yaml:"attachment_version"`
+	Filename          string `yaml:"filename"`
+	Size              int64  `yaml:"size"`
+	MediaType         string `yaml:"media_type,omitempty"`
+	DownloadPath      string `yaml:"download_path"`
+}
+
 func attachmentPointer(baseURL, pageID string, attachment Attachment) ([]byte, error) {
 	if attachment.ID == "" {
 		return nil, fmt.Errorf("attachment id is required")
@@ -243,19 +257,21 @@ func attachmentPointer(baseURL, pageID string, attachment Attachment) ([]byte, e
 		return nil, err
 	}
 	filename := safeAttachmentName(attachment.Title, attachment.ID)
-	var pointer strings.Builder
-	fmt.Fprintf(&pointer, "version %s\n", attachmentPointerVersion)
-	fmt.Fprintf(&pointer, "source %s\n", strings.TrimRight(baseURL, "/"))
-	fmt.Fprintf(&pointer, "page-id %s\n", pageID)
-	fmt.Fprintf(&pointer, "attachment-id %s\n", attachment.ID)
-	fmt.Fprintf(&pointer, "attachment-version %d\n", attachment.Version.Number)
-	fmt.Fprintf(&pointer, "filename %s\n", filename)
-	fmt.Fprintf(&pointer, "size %d\n", attachment.Extensions.FileSize)
-	if attachment.Extensions.MediaType != "" {
-		fmt.Fprintf(&pointer, "media-type %s\n", attachment.Extensions.MediaType)
+	pointer, err := yaml.Marshal(attachmentPointerYAML{
+		Version:           attachmentPointerVersion,
+		SourceURL:         strings.TrimRight(baseURL, "/"),
+		PageID:            pageID,
+		AttachmentID:      attachment.ID,
+		AttachmentVersion: attachment.Version.Number,
+		Filename:          filename,
+		Size:              attachment.Extensions.FileSize,
+		MediaType:         attachment.Extensions.MediaType,
+		DownloadPath:      downloadPath,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal attachment pointer YAML: %w", err)
 	}
-	fmt.Fprintf(&pointer, "download-path %s\n", downloadPath)
-	return []byte(pointer.String()), nil
+	return pointer, nil
 }
 
 func stableDownloadPath(baseURL, download string) (string, error) {

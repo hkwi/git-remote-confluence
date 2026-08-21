@@ -20,7 +20,7 @@ func TestBuildStreamContainsPageFiles(t *testing.T) {
 			ID:      "10",
 			Title:   "挿絵.png",
 			Path:    "1/attachments/挿絵.png",
-			Pointer: []byte("version pointer/v1\nattachment-id 10\nattachment-version 2\n"),
+			Pointer: []byte("version: pointer/v1\nattachment_id: \"10\"\nattachment_version: 2\n"),
 		}},
 	}
 
@@ -31,8 +31,8 @@ func TestBuildStreamContainsPageFiles(t *testing.T) {
 		[]byte("M 100644 inline 1.md\n"),
 		[]byte("M 100644 inline 1.yml\n"),
 		[]byte("M 100644 inline 1/attachments/挿絵.png\n"),
-		[]byte("attachment-id 10\n"),
-		[]byte("attachment-version 2\n"),
+		[]byte("attachment_id: \"10\"\n"),
+		[]byte("attachment_version: 2\n"),
 		[]byte(`storage_xml: "1.md"`),
 		[]byte("number: 3\n"),
 	} {
@@ -56,6 +56,20 @@ func TestBuildAttachmentStreamContainsVersionHistory(t *testing.T) {
 		[]byte("Import Confluence attachment 10 version 2\n"),
 		[]byte("from :1\n"),
 		[]byte("M 100644 inline diagram.png\n"),
+	} {
+		if !bytes.Contains(stream, expected) {
+			t.Fatalf("stream did not contain %q\n%s", expected, stream)
+		}
+	}
+}
+
+func TestBuildStreamProgressUsesLogfmt(t *testing.T) {
+	page := PageRecord{PageID: "1", Title: "line one\nline two"}
+	stream := BuildStreamWithProgress(DefaultBranch, Location{}, []PageRecord{page}, true)
+	for _, expected := range [][]byte{
+		[]byte(`progress level=INFO msg="importing 1 pages" app=git-remote-confluence` + "\n"),
+		[]byte(`progress level=INFO msg="importing page 1 line one\nline two" app=git-remote-confluence` + "\n"),
+		[]byte(`progress level=INFO msg=done app=git-remote-confluence` + "\n"),
 	} {
 		if !bytes.Contains(stream, expected) {
 			t.Fatalf("stream did not contain %q\n%s", expected, stream)

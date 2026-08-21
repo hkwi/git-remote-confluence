@@ -59,11 +59,12 @@ func TestGitCloneFromMockConfluence(t *testing.T) {
 
 	attachment := readCloneFile(t, destination, "1", "attachments", "挿絵.png")
 	for _, want := range []string{
-		"attachment-id 10\n",
-		"attachment-version 2\n",
-		"size 9\n",
-		"media-type image/png\n",
-		"download-path /download/attachments/1/%E6%8C%BF%E7%B5%B5.png\n",
+		"version: https://github.com/hkwi/git-remote-confluence/spec/attachment/v1\n",
+		"attachment_id: \"10\"\n",
+		"attachment_version: 2\n",
+		"size: 9\n",
+		"media_type: image/png\n",
+		"download_path: /download/attachments/1/%E6%8C%BF%E7%B5%B5.png\n",
 	} {
 		if !strings.Contains(string(attachment), want) {
 			t.Fatalf("attachment pointer missing %q:\n%s", want, attachment)
@@ -159,10 +160,10 @@ func TestHelperProgressOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(stderr.String(), "confluence: fetching page 1") {
+	if !strings.Contains(stderr.String(), `level=INFO msg="fetching page 1" app=git-remote-confluence`) {
 		t.Fatalf("stderr progress missing:\n%s", stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "progress confluence: importing page 1") {
+	if !strings.Contains(stdout.String(), `progress level=INFO msg="importing page 1 `) {
 		t.Fatalf("fast-import progress missing:\n%s", stdout.String())
 	}
 	if !strings.Contains(stdout.String(), "M 100644 inline 1.md\n") {
@@ -221,10 +222,10 @@ func TestHelperResolvesDisplayPageURL(t *testing.T) {
 
 	stderrText := stderr.String()
 	for _, want := range []string{
-		`confluence: resolving page "吾輩は猫である" in space ABC`,
-		`confluence: resolved page "吾輩は猫である" in space ABC to page 1`,
-		"confluence: root page 1 at " + server.URL,
-		"confluence: fetching page 1",
+		`level=INFO msg="resolving page \"吾輩は猫である\" in space ABC" app=git-remote-confluence`,
+		`level=INFO msg="resolved page \"吾輩は猫である\" in space ABC to page 1" app=git-remote-confluence`,
+		`level=INFO msg="root page 1 at ` + server.URL + `" app=git-remote-confluence`,
+		`level=INFO msg="fetching page 1" app=git-remote-confluence`,
 	} {
 		if !strings.Contains(stderrText, want) {
 			t.Fatalf("stderr missing %q:\n%s", want, stderrText)
@@ -233,7 +234,7 @@ func TestHelperResolvesDisplayPageURL(t *testing.T) {
 	if strings.Contains(stderrText, "fetching space ABC") {
 		t.Fatalf("display page URL was treated as a space:\n%s", stderrText)
 	}
-	if !strings.Contains(stdout.String(), "progress confluence: importing page 1 吾輩は猫である") {
+	if !strings.Contains(stdout.String(), `progress level=INFO msg="importing page 1 吾輩は猫である" app=git-remote-confluence`) {
 		t.Fatalf("fast-import progress missing resolved page:\n%s", stdout.String())
 	}
 }

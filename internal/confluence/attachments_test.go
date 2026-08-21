@@ -22,12 +22,13 @@ func TestAttachmentPointerUsesStableMetadata(t *testing.T) {
 	}
 	text := string(pointer)
 	for _, want := range []string{
-		"attachment-id 456\n",
-		"attachment-version 7\n",
-		"filename diagram one.png\n",
-		"size 42\n",
-		"media-type image/png\n",
-		"download-path /wiki/download/attachments/123/diagram%20one.png?api=v2\n",
+		"version: https://github.com/hkwi/git-remote-confluence/spec/attachment/v1\n",
+		"attachment_id: \"456\"\n",
+		"attachment_version: 7\n",
+		"filename: diagram one.png\n",
+		"size: 42\n",
+		"media_type: image/png\n",
+		"download_path: /wiki/download/attachments/123/diagram%20one.png?api=v2\n",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("pointer missing %q:\n%s", want, text)

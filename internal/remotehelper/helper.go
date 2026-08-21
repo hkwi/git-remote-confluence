@@ -4,11 +4,13 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 
 	"github.com/hkwi/git-remote-confluence/internal/confluence"
 	"github.com/hkwi/git-remote-confluence/internal/fastimport"
+	"github.com/hkwi/git-remote-confluence/internal/logging"
 )
 
 func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
@@ -24,7 +26,7 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		remoteURL:  remoteURL,
 		in:         bufio.NewReader(stdin),
 		out:        stdout,
-		err:        progressOut,
+		logger:     logging.New(progressOut),
 		verbosity:  1,
 		progress:   true,
 	}).serve()
@@ -35,7 +37,7 @@ type helper struct {
 	remoteURL  string
 	in         *bufio.Reader
 	out        io.Writer
-	err        io.Writer
+	logger     *slog.Logger
 	verbosity  int
 	progress   bool
 }
@@ -218,10 +220,10 @@ func (h *helper) confluenceClient() (confluence.Location, *confluence.Client, er
 }
 
 func (h *helper) reportProgress(format string, args ...any) {
-	if h.err == nil || !h.showProgress() {
+	if h.logger == nil || !h.showProgress() {
 		return
 	}
-	fmt.Fprintf(h.err, "confluence: "+format+"\n", args...)
+	h.logger.Info(fmt.Sprintf(format, args...), "app", "git-remote-confluence")
 }
 
 func (h *helper) showProgress() bool {

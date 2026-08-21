@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/hkwi/git-remote-confluence/internal/confluencetypes"
+	"github.com/hkwi/git-remote-confluence/internal/logging"
 )
 
 const DefaultBranch = "refs/heads/main"
@@ -62,9 +63,9 @@ func BuildStream(branch string, location Location, pages []PageRecord) []byte {
 func BuildStreamWithProgress(branch string, location Location, pages []PageRecord, progress bool) []byte {
 	var out bytes.Buffer
 	if progress {
-		appendProgress(&out, "confluence: importing %d pages", len(pages))
+		appendProgress(&out, "importing %d pages", len(pages))
 		for _, page := range pages {
-			appendProgress(&out, "confluence: importing page %s %s", page.PageID, page.Title)
+			appendProgress(&out, "importing page %s %s", page.PageID, page.Title)
 		}
 	}
 	fmt.Fprintf(&out, "commit %s\n", branch)
@@ -83,7 +84,7 @@ func BuildStreamWithProgress(branch string, location Location, pages []PageRecor
 
 	out.WriteByte('\n')
 	if progress {
-		appendProgress(&out, "confluence: done")
+		appendProgress(&out, "done")
 	}
 	out.WriteString("done\n")
 	return out.Bytes()
@@ -174,9 +175,10 @@ func appendData(out *bytes.Buffer, data []byte) {
 
 func appendProgress(out *bytes.Buffer, format string, args ...any) {
 	message := fmt.Sprintf(format, args...)
-	message = strings.NewReplacer("\n", " ", "\r", " ").Replace(message)
+	var record bytes.Buffer
+	logging.New(&record).Info(message, "app", "git-remote-confluence")
 	out.WriteString("progress ")
-	out.WriteString(message)
+	out.Write(bytes.TrimSuffix(record.Bytes(), []byte{'\n'}))
 	out.WriteByte('\n')
 }
 
