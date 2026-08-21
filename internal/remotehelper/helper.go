@@ -184,7 +184,10 @@ func (h *helper) confluenceClient() (confluence.Location, *confluence.Client, er
 		return confluence.Location{}, nil, fmt.Errorf("Confluence PAT is required; set CONFLUENCE_PAT or remote.%s.pat", h.remoteName)
 	}
 
-	return location, confluence.NewClient(location.BaseURL, pat), nil
+	client := confluence.NewClient(location.BaseURL, pat)
+	apiRoot, apiVersion := confluence.ResolveAPIPath(h.remoteName)
+	client.SetAPIPath(apiRoot, apiVersion)
+	return location, client, nil
 }
 
 func (h *helper) reportProgress(format string, args ...any) {

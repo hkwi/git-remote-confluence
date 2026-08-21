@@ -1,6 +1,9 @@
 package confluence
 
-import "testing"
+import (
+	"os/exec"
+	"testing"
+)
 
 func TestParseLocationPageURL(t *testing.T) {
 	location, err := ParseLocation("confluence::https://cf.example.test/wiki/pages/viewpage.action?pageId=123456789")
@@ -51,5 +54,54 @@ func TestParseLocationDisplayPageURLPreservesEscapedPlus(t *testing.T) {
 	}
 	if location.PageTitle != "C++" {
 		t.Fatalf("page title = %q", location.PageTitle)
+	}
+}
+
+func TestResolveAPIPathFromEnvironment(t *testing.T) {
+	t.Setenv("CONFLUENCE_API_ROOT", "/custom/api/root/")
+	t.Setenv("CONFLUENCE_API_VERSION", "/2.0/")
+
+	apiRoot, apiVersion := ResolveAPIPath("origin")
+	if apiRoot != "custom/api/root" || apiVersion != "2.0" {
+		t.Fatalf("API path = %q version %q", apiRoot, apiVersion)
+	}
+}
+
+func TestResolveAPIPathDefaultsToUnversionedRESTAPI(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("CONFLUENCE_API_ROOT", "")
+	t.Setenv("GIT_REMOTE_CONFLUENCE_API_ROOT", "")
+	t.Setenv("CONFLUENCE_API_VERSION", "")
+	t.Setenv("GIT_REMOTE_CONFLUENCE_API_VERSION", "")
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+
+	apiRoot, apiVersion := ResolveAPIPath("invalid remote name")
+	if apiRoot != "rest/api" || apiVersion != "" {
+		t.Fatalf("API path = %q version %q", apiRoot, apiVersion)
+	}
+}
+
+func TestResolveAPIPathFromRemoteConfig(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+
+	for _, args := range [][]string{
+		{"init"},
+		{"config", "remote.origin.apiRoot", "legacy/rest/api"},
+		{"config", "remote.origin.apiVersion", "1.0"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, output)
+		}
+	}
+
+	apiRoot, apiVersion := ResolveAPIPath("origin")
+	if apiRoot != "legacy/rest/api" || apiVersion != "1.0" {
+		t.Fatalf("API path = %q version %q", apiRoot, apiVersion)
 	}
 }

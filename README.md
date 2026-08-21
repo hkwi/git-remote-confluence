@@ -149,6 +149,38 @@ git checkout
 The remote URL may identify a page by `pageId`, a display page URL, or a
 Confluence space.
 
+## REST API Path
+
+By default, REST requests use the traditional unversioned `/rest/api` root. If
+a Confluence installation exposes the API below a different root or requires an
+explicit version, set either or both of these variables when cloning:
+
+```sh
+CONFLUENCE_API_ROOT=custom/api/root \
+CONFLUENCE_API_VERSION=2.0 \
+CONFLUENCE_PAT=... \
+git clone 'confluence::https://confluence.example.com/pages/viewpage.action?pageId=123456789'
+```
+
+This example sends content requests below
+`/custom/api/root/2.0/content/...`. `CONFLUENCE_API_VERSION` is omitted by
+default, preserving `/rest/api/content/...`. The aliases
+`GIT_REMOTE_CONFLUENCE_API_ROOT` and `GIT_REMOTE_CONFLUENCE_API_VERSION` are
+also accepted.
+
+For an existing configured remote, use Git configuration instead:
+
+```ini
+[remote "origin"]
+  apiRoot = custom/api/root
+  apiVersion = 2.0
+```
+
+The fallback keys are `confluence.apiRoot`, `confluence.apiVersion`,
+`remote.confluence.apiRoot`, and `remote.confluence.apiVersion`. Download and
+browser links returned by Confluence remain relative to the site URL; the API
+root and version are not added to them.
+
 ## Push
 
 After editing and committing page Markdown, push existing page body updates back
