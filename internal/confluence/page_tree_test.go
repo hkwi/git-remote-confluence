@@ -59,7 +59,7 @@ func pageTreeTestClient(t *testing.T, failurePath string, status int, body strin
 		"/rest/api/content/1":                  `{"id":"1"}`,
 		"/rest/api/content/1/child/page":       `{"results":[{"id":"2"},{"id":"3"}]}`,
 		"/rest/api/content/1/child/attachment": `{"results":[]}`,
-		"/rest/api/content/2":                  `{"id":"2"}`,
+		"/rest/api/content/2":                  `{"id":"2","version":{"number":1},"body":{"storage":{"value":"<p>Known page.</p>"}}}`,
 		"/rest/api/content/2/child/page":       `{"results":[{"id":"4"}]}`,
 		"/rest/api/content/2/child/attachment": `{"results":[]}`,
 		"/rest/api/content/3":                  `{"id":"3"}`,

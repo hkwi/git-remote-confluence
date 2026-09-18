@@ -37,12 +37,13 @@ func clientUserAgent(c *Client) string {
 }
 
 type Client struct {
-	BaseURL    string
-	PAT        string
-	APIRoot    string
-	APIVersion string
-	HTTPClient *http.Client
-	UserAgent  string
+	BaseURL       string
+	PAT           string
+	APIRoot       string
+	APIVersion    string
+	HTTPClient    *http.Client
+	UserAgent     string
+	RetryProgress ProgressFunc
 }
 
 type Page struct {
@@ -135,6 +136,8 @@ func (c *Client) FetchPage(pageID string) (Page, error) {
 	return page, nil
 }
 
+// FetchChildren also returns entries from completed batches if a later batch
+// fails. Callers must check the error before treating the listing as complete.
 func (c *Client) FetchChildren(pageID string) ([]Page, error) {
 	return c.paginated(c.apiPath("content/"+url.PathEscape(pageID)+"/child/page"), commonExpand())
 }
@@ -217,7 +220,7 @@ func (c *Client) paginated(path string, baseValues url.Values) ([]Page, error) {
 
 		var response listResponse
 		if err := c.getJSON(path, values, &response); err != nil {
-			return nil, err
+			return pages, err
 		}
 		pages = append(pages, response.Results...)
 
@@ -243,11 +246,7 @@ func (c *Client) getJSON(path string, values url.Values, target any) error {
 	req.Header.Set("Authorization", "Bearer "+c.PAT)
 	req.Header.Set("User-Agent", clientUserAgent(c))
 
-	client := c.HTTPClient
-	if client == nil {
-		client = http.DefaultClient
-	}
-	resp, err := client.Do(req)
+	resp, err := c.doGET(req)
 	if err != nil {
 		return fmt.Errorf("Confluence API request failed: %w", err)
 	}
@@ -274,11 +273,7 @@ func (c *Client) getBytes(requestURL string) ([]byte, error) {
 	req.Header.Set("Authorization", "Bearer "+c.PAT)
 	req.Header.Set("User-Agent", clientUserAgent(c))
 
-	client := c.HTTPClient
-	if client == nil {
-		client = http.DefaultClient
-	}
-	resp, err := client.Do(req)
+	resp, err := c.doGET(req)
 	if err != nil {
 		return nil, fmt.Errorf("Confluence attachment request failed: %w", err)
 	}

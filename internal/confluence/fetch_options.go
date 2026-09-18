@@ -17,9 +17,16 @@ type SkippedPage struct {
 	StatusCode int
 }
 
+type ChildListError struct {
+	PageID     string
+	ParentID   string
+	StatusCode int
+}
+
 type FetchResult struct {
-	Pages        []fastimport.PageRecord
-	SkippedPages []SkippedPage
+	Pages                 []fastimport.PageRecord
+	SkippedPages          []SkippedPage
+	UnavailableChildLists []ChildListError
 }
 
 func FetchPagesWithOptions(client *Client, location Location, options FetchOptions) (FetchResult, error) {
