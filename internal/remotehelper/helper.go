@@ -208,6 +208,7 @@ func (h *helper) confluenceClient() (confluence.Location, *confluence.Client, er
 	}
 
 	client := confluence.NewClient(location.BaseURL, pat)
+	client.RetryProgress = h.reportProgress
 	apiRoot, apiVersion := confluence.ResolveAPIPath(h.remoteName)
 	client.SetAPIPath(apiRoot, apiVersion)
 	return location, client, nil

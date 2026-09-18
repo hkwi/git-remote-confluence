@@ -171,8 +171,8 @@ A 404 may mean missing content or insufficient permission, so a partial clone
 does not establish that the omitted pages have been deleted.
 
 Root page failures, child-list failures, attachment failures, HTTP 401/429/5xx,
-invalid responses, and network failures still abort the operation. Space
-imports also retain their existing strict behavior.
+invalid responses, and persistent network failures still abort the operation.
+Space imports also retain their existing strict behavior.
 
 The option accepts `true` or `false` and can also be set via, in precedence
 order, `CONFLUENCE_ALLOW_PARTIAL_CLONE`,
@@ -181,6 +181,21 @@ order, `CONFLUENCE_ALLOW_PARTIAL_CLONE`,
 It applies only when Git identifies the operation as cloning. Subsequent
 `git fetch` operations remain strict even if the setting persists, so a
 retrieval failure cannot replace an existing snapshot with a partial one.
+
+### Connection retries
+
+GET requests retry temporary connection failures, including refused proxy
+connections, resets, and timeouts before a response is received. There are at
+most four attempts, with waits of 1, 2, and 4 seconds. Each attempt retains the
+60-second HTTP timeout. Progress output shows the failed request, wait, and
+next attempt; only that request is retried, so completed page requests are not
+restarted.
+
+HTTP error responses, invalid JSON, and failures while reading response bodies
+are not retried. PUT requests are not automatically resent. If retries are
+exhausted, the import fails and existing Git refs remain unchanged, including
+when partial cloning is enabled. Git's `stream ends early` message then reflects
+the incomplete import; the preceding helper error identifies the cause.
 
 ## REST API Path
 
