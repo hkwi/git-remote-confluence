@@ -258,7 +258,7 @@ func (c *Client) getJSON(path string, values url.Values, target any) error {
 		return err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("Confluence API HTTP %d: %s", resp.StatusCode, string(body))
+		return &APIError{StatusCode: resp.StatusCode, Method: req.Method, URL: requestURL, Body: string(body)}
 	}
 	if err := json.Unmarshal(body, target); err != nil {
 		return fmt.Errorf("Confluence API returned invalid JSON from %s: %w", requestURL, err)
@@ -289,7 +289,7 @@ func (c *Client) getBytes(requestURL string) ([]byte, error) {
 		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("Confluence attachment HTTP %d: %s", resp.StatusCode, string(body))
+		return nil, &APIError{StatusCode: resp.StatusCode, Method: req.Method, URL: requestURL, Body: string(body)}
 	}
 	return body, nil
 }
@@ -325,7 +325,7 @@ func (c *Client) putJSON(path string, payload any, target any) error {
 		return err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("Confluence API HTTP %d: %s", resp.StatusCode, string(responseBody))
+		return &APIError{StatusCode: resp.StatusCode, Method: req.Method, URL: requestURL, Body: string(responseBody)}
 	}
 	if target == nil {
 		return nil

@@ -149,6 +149,39 @@ git checkout
 The remote URL may identify a page by `pageId`, a display page URL, or a
 Confluence space.
 
+### Unavailable child pages
+
+Initial clones of a page tree allow partial retrieval by default
+(`confluence.allowPartialClone=true`). To require every listed page to be
+retrieved, disable partial cloning explicitly:
+
+```sh
+CONFLUENCE_PAT=... git -c confluence.allowPartialClone=false clone \
+  'confluence::https://confluence.example.com/pages/viewpage.action?pageId=123456789'
+```
+
+With partial cloning enabled, HTTP 403 and 404 responses when fetching a
+descendant page's content are skipped, together with that page's subtree.
+Other pages and their attachments
+are still imported. Warnings identify each skipped page, its parent, and the
+HTTP status, and summarize the skipped count even with `--quiet`. A parent's
+metadata lists imported children in `children` and omitted children in
+`skipped_children`; the skipped count does not include unknown descendants.
+A 404 may mean missing content or insufficient permission, so a partial clone
+does not establish that the omitted pages have been deleted.
+
+Root page failures, child-list failures, attachment failures, HTTP 401/429/5xx,
+invalid responses, and network failures still abort the operation. Space
+imports also retain their existing strict behavior.
+
+The option accepts `true` or `false` and can also be set via, in precedence
+order, `CONFLUENCE_ALLOW_PARTIAL_CLONE`,
+`GIT_REMOTE_CONFLUENCE_ALLOW_PARTIAL_CLONE`, `remote.<name>.allowPartialClone`,
+`confluence.allowPartialClone`, or `remote.confluence.allowPartialClone`.
+It applies only when Git identifies the operation as cloning. Subsequent
+`git fetch` operations remain strict even if the setting persists, so a
+retrieval failure cannot replace an existing snapshot with a partial one.
+
 ## REST API Path
 
 By default, REST requests use the traditional unversioned `/rest/api` root. If
