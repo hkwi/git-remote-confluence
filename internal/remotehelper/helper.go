@@ -38,6 +38,7 @@ type helper struct {
 	err        io.Writer
 	verbosity  int
 	progress   bool
+	cloning    bool
 }
 
 func (h *helper) serve() error {
@@ -113,7 +114,15 @@ func (h *helper) handleOption(line string) error {
 		h.progress = value == "true"
 		_, err := io.WriteString(h.out, "ok\n")
 		return err
-	case "cloning", "check-connectivity":
+	case "cloning":
+		if value != "true" && value != "false" {
+			_, err := io.WriteString(h.out, "error invalid cloning\n")
+			return err
+		}
+		h.cloning = value == "true"
+		_, err := io.WriteString(h.out, "ok\n")
+		return err
+	case "check-connectivity":
 		_, err := io.WriteString(h.out, "ok\n")
 		return err
 	default:
@@ -140,6 +149,12 @@ func (h *helper) readImportBatch(first string) ([]string, error) {
 }
 
 func (h *helper) runImport(refs []string) error {
+	// Require the terminating done command before making any API requests.
+	// Otherwise Git can accept an empty stream after a helper failure and report
+	// a successful fetch when the destination ref already exists.
+	if _, err := io.WriteString(h.out, "feature done\n"); err != nil {
+		return err
+	}
 	location, client, err := h.confluenceClient()
 	if err != nil {
 		return err
@@ -150,10 +165,18 @@ func (h *helper) runImport(refs []string) error {
 	}
 	h.reportProgress("root %s %s at %s", location.RootType, location.RootValue, location.BaseURL)
 
-	pages, err := confluence.FetchPagesWithProgress(client, location, h.reportProgress)
+	options, err := h.fetchOptions()
 	if err != nil {
 		return err
 	}
+	result, err := confluence.FetchPagesWithOptions(client, location, options)
+	if err != nil {
+		return err
+	}
+	if len(result.SkippedPages) > 0 {
+		h.reportWarning("partial clone: skipped %d unavailable pages and their subtrees; subsequent fetches remain strict", len(result.SkippedPages))
+	}
+	pages := result.Pages
 	if len(pages) == 0 {
 		return fmt.Errorf("Confluence returned no pages")
 	}

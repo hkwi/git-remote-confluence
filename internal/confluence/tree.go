@@ -16,19 +16,8 @@ func FetchPages(client *Client, location Location) ([]fastimport.PageRecord, err
 }
 
 func FetchPagesWithProgress(client *Client, location Location, progress ProgressFunc) ([]fastimport.PageRecord, error) {
-	location, err := ResolveLocation(client, location, progress)
-	if err != nil {
-		return nil, err
-	}
-
-	switch location.RootType {
-	case "page":
-		return fetchPageTree(client, location.RootValue, progress)
-	case "space":
-		return fetchSpaceTree(client, location.RootValue, progress)
-	default:
-		return nil, ErrUnsupportedRoot(location.RootType)
-	}
+	result, err := FetchPagesWithOptions(client, location, FetchOptions{Progress: progress})
+	return result.Pages, err
 }
 
 func ResolveLocation(client *Client, location Location, progress ProgressFunc) (Location, error) {
@@ -59,58 +48,6 @@ type ErrUnresolvedPageLocation struct{}
 
 func (e ErrUnresolvedPageLocation) Error() string {
 	return "page root must identify a pageId or a display page title"
-}
-
-func fetchPageTree(client *Client, rootID string, progress ProgressFunc) ([]fastimport.PageRecord, error) {
-	var records []fastimport.PageRecord
-	seen := map[string]bool{}
-
-	var visit func(pageID, parentID, pathDir string) error
-	visit = func(pageID, parentID, pathDir string) error {
-		if seen[pageID] {
-			return nil
-		}
-		seen[pageID] = true
-
-		report(progress, "fetching page %s", pageID)
-		page, err := client.FetchPage(pageID)
-		if err != nil {
-			return err
-		}
-		children, err := client.FetchChildren(pageID)
-		if err != nil {
-			return err
-		}
-
-		childIDs := make([]string, 0, len(children))
-		for _, child := range children {
-			if child.ID != "" {
-				childIDs = append(childIDs, child.ID)
-			}
-		}
-		report(progress, "page %s has %d child pages", pageID, len(childIDs))
-
-		record := pageRecord(page, parentID, childIDs, pathDir, client.BaseURL)
-		attachments, err := fetchAttachments(client, record, progress)
-		if err != nil {
-			return err
-		}
-		record.Attachments = attachments
-		records = append(records, record)
-
-		childPathDir := joinPath(pathDir, record.PageID)
-		for _, childID := range childIDs {
-			if err := visit(childID, record.PageID, childPathDir); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-
-	if err := visit(rootID, "", ""); err != nil {
-		return nil, err
-	}
-	return records, nil
 }
 
 func fetchSpaceTree(client *Client, spaceKey string, progress ProgressFunc) ([]fastimport.PageRecord, error) {
