@@ -21,21 +21,27 @@ func fetchPageTree(client *Client, rootID string, options FetchOptions) (FetchRe
 		report(options.Progress, "fetching page %s", pageID)
 		page, err := client.FetchPage(pageID)
 		if err != nil {
-			var apiErr *APIError
-			if options.SkipUnavailableChildren && parentID != "" && errors.As(err, &apiErr) &&
-				(apiErr.StatusCode == http.StatusForbidden || apiErr.StatusCode == http.StatusNotFound) {
+			if status := unavailableContentStatus(err); options.SkipUnavailableChildren && parentID != "" && status != 0 {
 				skipped[pageID] = true
 				result.SkippedPages = append(result.SkippedPages, SkippedPage{
-					PageID: pageID, ParentID: parentID, StatusCode: apiErr.StatusCode,
+					PageID: pageID, ParentID: parentID, StatusCode: status,
 				})
-				report(options.Warning, "skipping page %s under parent %s and its subtree: HTTP %d (missing or not permitted)", pageID, parentID, apiErr.StatusCode)
+				report(options.Warning, "skipping page %s under parent %s and its subtree: HTTP %d (missing or not permitted)", pageID, parentID, status)
 				return nil
 			}
 			return fmt.Errorf("fetch page %s: %w", pageID, err)
 		}
 		children, err := client.FetchChildren(pageID)
+		childrenErrorStatus := 0
 		if err != nil {
-			return fmt.Errorf("fetch children of page %s: %w", pageID, err)
+			childrenErrorStatus = unavailableContentStatus(err)
+			if !options.SkipUnavailableChildren || parentID == "" || childrenErrorStatus == 0 {
+				return fmt.Errorf("fetch children of page %s: %w", pageID, err)
+			}
+			result.UnavailableChildLists = append(result.UnavailableChildLists, ChildListError{
+				PageID: pageID, ParentID: parentID, StatusCode: childrenErrorStatus,
+			})
+			report(options.Warning, "incomplete child list for page %s under parent %s: HTTP %d; keeping page and any listed children, remaining descendants unknown", pageID, parentID, childrenErrorStatus)
 		}
 
 		var childIDs []string
@@ -44,9 +50,12 @@ func fetchPageTree(client *Client, rootID string, options FetchOptions) (FetchRe
 				childIDs = append(childIDs, child.ID)
 			}
 		}
-		report(options.Progress, "page %s has %d child pages", pageID, len(childIDs))
+		if childrenErrorStatus == 0 {
+			report(options.Progress, "page %s has %d child pages", pageID, len(childIDs))
+		}
 
 		record := pageRecord(page, parentID, childIDs, pathDir, client.BaseURL)
+		record.ChildrenErrorStatus = childrenErrorStatus
 		attachments, err := fetchAttachments(client, record, options.Progress)
 		if err != nil {
 			return err
@@ -78,4 +87,12 @@ func fetchPageTree(client *Client, rootID string, options FetchOptions) (FetchRe
 		return FetchResult{}, err
 	}
 	return result, nil
+}
+
+func unavailableContentStatus(err error) int {
+	var apiErr *APIError
+	if errors.As(err, &apiErr) && (apiErr.StatusCode == http.StatusForbidden || apiErr.StatusCode == http.StatusNotFound) {
+		return apiErr.StatusCode
+	}
+	return 0
 }

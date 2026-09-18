@@ -21,18 +21,19 @@ type Location struct {
 }
 
 type PageRecord struct {
-	PageID          string
-	Title           string
-	Status          string
-	SpaceKey        string
-	ParentID        string
-	ChildIDs        []string
-	SkippedChildIDs []string
-	Version         confluencetypes.Version
-	Links           map[string]string
-	StorageXML      string
-	PathDir         string
-	Attachments     []AttachmentRecord
+	PageID              string
+	Title               string
+	Status              string
+	SpaceKey            string
+	ParentID            string
+	ChildIDs            []string
+	SkippedChildIDs     []string
+	ChildrenErrorStatus int
+	Version             confluencetypes.Version
+	Links               map[string]string
+	StorageXML          string
+	PathDir             string
+	Attachments         []AttachmentRecord
 }
 
 type AttachmentRecord struct {
@@ -121,6 +122,9 @@ func PageMetadataYAML(location Location, page PageRecord) string {
 	}
 	if len(page.SkippedChildIDs) > 0 {
 		root = append(root, yamlPair{"skipped_children", page.SkippedChildIDs})
+	}
+	if page.ChildrenErrorStatus != 0 {
+		root = append(root, yamlPair{"children_error", yamlMap{{"http_status", page.ChildrenErrorStatus}}})
 	}
 	return dumpYAML(compactMap(root))
 }

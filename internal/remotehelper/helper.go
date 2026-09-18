@@ -176,6 +176,9 @@ func (h *helper) runImport(refs []string) error {
 	if len(result.SkippedPages) > 0 {
 		h.reportWarning("partial clone: skipped %d unavailable pages and their subtrees; subsequent fetches remain strict", len(result.SkippedPages))
 	}
+	if len(result.UnavailableChildLists) > 0 {
+		h.reportWarning("partial clone: incomplete child lists for %d pages; descendants may be missing; subsequent fetches remain strict", len(result.UnavailableChildLists))
+	}
 	pages := result.Pages
 	if len(pages) == 0 {
 		return fmt.Errorf("Confluence returned no pages")

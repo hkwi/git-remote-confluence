@@ -162,15 +162,22 @@ CONFLUENCE_PAT=... git -c confluence.allowPartialClone=false clone \
 
 With partial cloning enabled, HTTP 403 and 404 responses when fetching a
 descendant page's content are skipped, together with that page's subtree.
-Other pages and their attachments
-are still imported. Warnings identify each skipped page, its parent, and the
-HTTP status, and summarize the skipped count even with `--quiet`. A parent's
+Other pages and their attachments are still imported. Warnings identify each
+skipped page, its parent, and the HTTP status, and summarize the skipped count
+even with `--quiet`. A parent's
 metadata lists imported children in `children` and omitted children in
 `skipped_children`; the skipped count does not include unknown descendants.
 A 404 may mean missing content or insufficient permission, so a partial clone
 does not establish that the omitted pages have been deleted.
 
-Root page failures, child-list failures, attachment failures, HTTP 401/429/5xx,
+If a readable descendant's child listing returns HTTP 403 or 404, its page and
+attachments are retained, along with any children listed in completed batches.
+Its metadata records `children_error.http_status`; `children` then describes
+only the imported subset, not a complete list. Warnings identify the page and
+summarize incomplete listings even with `--quiet`. Unknown descendants are not
+reported as a zero-child result.
+
+Root page or root child-list failures, attachment failures, HTTP 401/429/5xx,
 invalid responses, and persistent network failures still abort the operation.
 Space imports also retain their existing strict behavior.
 

@@ -136,6 +136,8 @@ func (c *Client) FetchPage(pageID string) (Page, error) {
 	return page, nil
 }
 
+// FetchChildren also returns entries from completed batches if a later batch
+// fails. Callers must check the error before treating the listing as complete.
 func (c *Client) FetchChildren(pageID string) ([]Page, error) {
 	return c.paginated(c.apiPath("content/"+url.PathEscape(pageID)+"/child/page"), commonExpand())
 }
@@ -218,7 +220,7 @@ func (c *Client) paginated(path string, baseValues url.Values) ([]Page, error) {
 
 		var response listResponse
 		if err := c.getJSON(path, values, &response); err != nil {
-			return nil, err
+			return pages, err
 		}
 		pages = append(pages, response.Results...)
 
