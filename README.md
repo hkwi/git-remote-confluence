@@ -189,6 +189,13 @@ It applies only when Git identifies the operation as cloning. Subsequent
 `git fetch` operations remain strict even if the setting persists, so a
 retrieval failure cannot replace an existing snapshot with a partial one.
 
+### Repeated fetch
+
+Fetching an already-cloned Confluence mapping chains each import onto the
+existing local tip with a `from` line, so a successful fetch is a fast-forward
+update rather than a rewrite. This lets `git fetch` refresh a snapshot repeatedly
+without being rejected as non-fast-forward.
+
 ### Connection retries
 
 GET requests retry temporary connection failures, including refused proxy

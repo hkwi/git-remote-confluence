@@ -311,3 +311,85 @@ func repoRoot(t *testing.T) string {
 		wd = parent
 	}
 }
+
+// TestGitRefetchFastForwards verifies that a second fetch of the same
+// Confluence remote chains onto the previously imported tip with a "from"
+// line, so the branch advances by fast-forward instead of being rejected as a
+// history rewrite.
+func TestGitRefetchFastForwards(t *testing.T) {
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("GIT_CONFIG_COUNT", "0")
+	t.Setenv("CONFLUENCE_PAT", "secret-token")
+	t.Setenv("NO_PROXY", "127.0.0.1,localhost")
+	t.Setenv("no_proxy", "127.0.0.1,localhost")
+
+	server := httptest.NewServer(mockConfluenceHandler(t))
+	defer server.Close()
+
+	tmp := t.TempDir()
+	destination := filepath.Join(tmp, "clone")
+	binDir := filepath.Join(tmp, "bin")
+	if err := os.Mkdir(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	helperPath := filepath.Join(binDir, "git-remote-confluence")
+	build := exec.Command("go", "build", "-o", helperPath, ".")
+	build.Dir = repoRoot(t)
+	build.Env = append(os.Environ(), "GOCACHE="+filepath.Join(tmp, "gocache"))
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build helper: %v\n%s", err, output)
+	}
+
+	remote := "confluence::" + server.URL + "/pages/viewpage.action?pageId=1"
+	env := append(os.Environ(),
+		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"GIT_EXEC_PATH="+binDir,
+		"CONFLUENCE_PAT=secret-token",
+		"NO_PROXY=127.0.0.1,localhost",
+		"no_proxy=127.0.0.1,localhost",
+		"GOCACHE="+filepath.Join(tmp, "gocache"),
+	)
+	runGit := func(args ...string) (string, error) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = tmp
+		cmd.Env = env
+		output, err := cmd.CombinedOutput()
+		return string(output), err
+	}
+
+	if output, err := runGit("clone", remote, destination); err != nil {
+		t.Fatalf("clone: %v\n%s", err, output)
+	}
+	first, err := runGit("-C", destination, "rev-parse", "refs/heads/main")
+	if err != nil {
+		t.Fatalf("first tip: %v\n%s", err, first)
+	}
+	first = strings.TrimSpace(first)
+
+	// A second fetch must succeed and advance the branch by one commit instead
+	// of failing with "error while running fast-import".
+	if output, err := runGit("-C", destination, "fetch", "origin"); err != nil {
+		t.Fatalf("refetch failed (non-fast-forward?): %v\n%s", err, output)
+	}
+	second, err := runGit("-C", destination, "rev-parse", "refs/heads/main")
+	if err != nil {
+		t.Fatalf("second tip: %v\n%s", err, second)
+	}
+	second = strings.TrimSpace(second)
+	if second == first {
+		t.Fatalf("refetch did not advance the branch: %s", second)
+	}
+	// The new tip must be a child of the old tip (truly a fast-forward).
+	parent, err := runGit("-C", destination, "rev-parse", second+"^")
+	if err != nil {
+		t.Fatalf("resolve parent: %v\n%s", err, parent)
+	}
+	if strings.TrimSpace(parent) != first {
+		t.Fatalf("second tip %s parent %s != previous tip %s", second, strings.TrimSpace(parent), first)
+	}
+	// The worktree content must still be intact after the refetch.
+	if page := string(readCloneFile(t, destination, "1.md")); page != "<p>吾輩は猫である。</p>" {
+		t.Fatalf("refetch changed page content: %q", page)
+	}
+}

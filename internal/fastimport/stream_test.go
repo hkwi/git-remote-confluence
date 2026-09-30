@@ -37,3 +37,28 @@ func TestBuildStreamContainsPageFiles(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildStreamWithParentEmitsFromLine(t *testing.T) {
+	page := PageRecord{
+		PageID:     "1",
+		Title:      "父を持つ",
+		Status:     "current",
+		SpaceKey:   "ABC",
+		Version:    confluencetypes.Version{Number: 2, When: "2025-01-02T03:04:05.000Z"},
+		StorageXML: "<p>次のコミット</p>",
+	}
+
+	// A stream built without an explicit parent must not contain a from line.
+	root := BuildStreamWithParent(DefaultBranch, Location{}, []PageRecord{page}, "", false)
+	if bytes.Contains(root, []byte("\nfrom ")) {
+		t.Fatalf("root import must not carry a from line:\n%s", root)
+	}
+
+	// A stream chained onto an existing tip must carry a from line so that
+	// git fast-import treats it as a fast-forward child commit.
+	const parent = "0123456789abcdef0123456789abcdef01234567"
+	chained := BuildStreamWithParent(DefaultBranch, Location{}, []PageRecord{page}, parent, false)
+	if !bytes.Contains(chained, []byte("\nfrom "+parent+"\n")) {
+		t.Fatalf("chained import missing from line:\n%s", chained)
+	}
+}

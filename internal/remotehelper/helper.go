@@ -9,6 +9,7 @@ import (
 
 	"github.com/hkwi/git-remote-confluence/internal/confluence"
 	"github.com/hkwi/git-remote-confluence/internal/fastimport"
+	"github.com/hkwi/git-remote-confluence/internal/gitrepo"
 )
 
 func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
@@ -185,10 +186,19 @@ func (h *helper) runImport(refs []string) error {
 	}
 	h.reportProgress("fetched %d Confluence pages", len(pages))
 
-	stream := fastimport.BuildStreamWithProgress(
-		fastimport.SelectBranch(refs),
+	branch := fastimport.SelectBranch(refs)
+	parent, err := gitrepo.ResolveCommit(branch)
+	if err != nil {
+		return err
+	}
+	if parent != "" {
+		h.reportProgress("chaining import of %s onto existing tip %s", branch, parent)
+	}
+	stream := fastimport.BuildStreamWithParent(
+		branch,
 		fastimport.Location{RootType: location.RootType, RootValue: location.RootValue},
 		pages,
+		parent,
 		h.showProgress(),
 	)
 	h.reportProgress("writing %d bytes to git fast-import", len(stream))
