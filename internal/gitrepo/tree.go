@@ -59,3 +59,16 @@ func gitOutput(args ...string) ([]byte, error) {
 	}
 	return output, nil
 }
+
+// ResolveCommit returns the full commit object ID that ref currently points
+// to, or "" when the ref does not yet exist in the local repository. It is
+// used to chain each Confluence import onto the previous local tip so that
+// repeated fetches fast-forward instead of being rejected as rewriting
+// history. A missing ref (the initial clone) is not an error.
+func ResolveCommit(ref string) (string, error) {
+	output, err := gitOutput("rev-parse", "--verify", "--quiet", ref+"^{commit}")
+	if err != nil {
+		return "", nil
+	}
+	return strings.TrimSpace(string(output)), nil
+}

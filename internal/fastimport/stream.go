@@ -49,11 +49,24 @@ func (p PageRecord) MetadataPath() string {
 	return joinPath(p.PathDir, p.PageID+".yml")
 }
 
+// BuildStream is a convenience wrapper that produces a root import commit
+// (no parent). Use BuildStreamWithParent to chain repeated imports onto the
+// previous local tip.
 func BuildStream(branch string, location Location, pages []PageRecord) []byte {
-	return BuildStreamWithProgress(branch, location, pages, false)
+	return BuildStreamWithParent(branch, location, pages, "", false)
 }
 
+// BuildStreamWithProgress is a convenience wrapper that produces a root import
+// commit (no parent) while optionally emitting progress lines.
 func BuildStreamWithProgress(branch string, location Location, pages []PageRecord, progress bool) []byte {
+	return BuildStreamWithParent(branch, location, pages, "", progress)
+}
+
+// BuildStreamWithParent builds a fast-import stream for a fresh import of
+// pages onto branch. When parent is non-empty it is emitted as a "from" line,
+// chaining the new commit onto the existing local tip so that repeated fetches
+// remain fast-forward instead of being rejected as a rewrite of history.
+func BuildStreamWithParent(branch string, location Location, pages []PageRecord, parent string, progress bool) []byte {
 	var out bytes.Buffer
 	if progress {
 		appendProgress(&out, "confluence: importing %d pages", len(pages))
@@ -64,6 +77,9 @@ func BuildStreamWithProgress(branch string, location Location, pages []PageRecor
 	fmt.Fprintf(&out, "commit %s\n", branch)
 	fmt.Fprintf(&out, "committer Confluence <confluence@example.invalid> %d +0000\n", commitTimestamp(pages))
 	appendData(&out, []byte(commitMessage(location)))
+	if parent != "" {
+		fmt.Fprintf(&out, "from %s\n", parent)
+	}
 	out.WriteString("deleteall\n")
 	appendFile(&out, AttributesPath, []byte(AttributesContent))
 
