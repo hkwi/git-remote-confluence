@@ -50,11 +50,13 @@ func (e ErrUnresolvedPageLocation) Error() string {
 	return "page root must identify a pageId or a display page title"
 }
 
-func fetchSpaceTree(client *Client, spaceKey string, progress ProgressFunc) ([]fastimport.PageRecord, error) {
+func fetchSpaceTree(client *Client, spaceKey string, options FetchOptions) (FetchResult, error) {
+	progress := options.Progress
+	var result FetchResult
 	report(progress, "fetching space %s", spaceKey)
 	pages, err := client.FetchSpacePages(spaceKey)
 	if err != nil {
-		return nil, err
+		return FetchResult{}, err
 	}
 	report(progress, "space %s returned %d pages", spaceKey, len(pages))
 
@@ -98,11 +100,17 @@ func fetchSpaceTree(client *Client, spaceKey string, progress ProgressFunc) ([]f
 
 		page := byID[pageID]
 		record := pageRecord(page, parentByID[pageID], children[pageID], pathDir, client.BaseURL)
-		attachments, err := fetchAttachments(client, record, progress)
+		attachments, attachmentStatus, err := fetchAttachments(client, record, options)
 		if err != nil {
 			return err
 		}
 		record.Attachments = attachments
+		record.AttachmentsErrorStatus = attachmentStatus
+		if attachmentStatus != 0 {
+			result.UnavailableAttachments = append(result.UnavailableAttachments, AttachmentError{
+				PageID: record.PageID, StatusCode: attachmentStatus,
+			})
+		}
 		records = append(records, record)
 
 		childPathDir := joinPath(pathDir, record.PageID)
@@ -116,7 +124,7 @@ func fetchSpaceTree(client *Client, spaceKey string, progress ProgressFunc) ([]f
 
 	for _, rootID := range children[""] {
 		if err := visit(rootID, ""); err != nil {
-			return nil, err
+			return FetchResult{}, err
 		}
 	}
 
@@ -127,25 +135,43 @@ func fetchSpaceTree(client *Client, spaceKey string, progress ProgressFunc) ([]f
 	sort.Strings(ids)
 	for _, id := range ids {
 		if err := visit(id, ""); err != nil {
-			return nil, err
+			return FetchResult{}, err
 		}
 	}
-	return records, nil
+	result.Pages = records
+	return result, nil
 }
 
-func fetchAttachments(client *Client, page fastimport.PageRecord, progress ProgressFunc) ([]fastimport.AttachmentRecord, error) {
+// fetchAttachments returns the downloadable attachments of page. Confluence
+// grants attachment permissions separately from page permissions, so a refused
+// listing or download reports the HTTP status instead of failing the import and
+// losing every readable page.
+func fetchAttachments(client *Client, page fastimport.PageRecord, options FetchOptions) ([]fastimport.AttachmentRecord, int, error) {
+	progress := options.Progress
 	attachments, err := client.FetchAttachments(page.PageID)
 	if err != nil {
-		return nil, fmt.Errorf("fetch attachments for page %s: %w", page.PageID, err)
+		status := unavailableContentStatus(err)
+		if status == 0 {
+			return nil, 0, fmt.Errorf("fetch attachments for page %s: %w", page.PageID, err)
+		}
+		report(options.Warning, "attachment list unavailable for page %s: HTTP %d; importing the page without attachments", page.PageID, status)
+		return nil, status, nil
 	}
 	report(progress, "page %s has %d attachments", page.PageID, len(attachments))
 
+	errorStatus := 0
 	result := make([]fastimport.AttachmentRecord, 0, len(attachments))
 	usedPaths := map[string]bool{}
 	for _, attachment := range attachments {
 		data, err := client.DownloadAttachment(attachment)
 		if err != nil {
-			return nil, fmt.Errorf("download attachment %s (%q): %w", attachment.ID, attachment.Title, err)
+			status := unavailableContentStatus(err)
+			if status == 0 {
+				return nil, 0, fmt.Errorf("download attachment %s (%q): %w", attachment.ID, attachment.Title, err)
+			}
+			errorStatus = status
+			report(options.Warning, "skipping attachment %s (%q) on page %s: HTTP %d", attachment.ID, attachment.Title, page.PageID, status)
+			continue
 		}
 		name := safeAttachmentName(attachment.Title, attachment.ID)
 		path := joinPath(page.PathDir, page.PageID, "attachments", name)
@@ -160,7 +186,7 @@ func fetchAttachments(client *Client, page fastimport.PageRecord, progress Progr
 		})
 		report(progress, "downloaded attachment %s %s (%d bytes)", attachment.ID, attachment.Title, len(data))
 	}
-	return result, nil
+	return result, errorStatus, nil
 }
 
 func safeAttachmentName(title, id string) string {

@@ -23,10 +23,16 @@ type ChildListError struct {
 	StatusCode int
 }
 
+type AttachmentError struct {
+	PageID     string
+	StatusCode int
+}
+
 type FetchResult struct {
-	Pages                 []fastimport.PageRecord
-	SkippedPages          []SkippedPage
-	UnavailableChildLists []ChildListError
+	Pages                  []fastimport.PageRecord
+	SkippedPages           []SkippedPage
+	UnavailableChildLists  []ChildListError
+	UnavailableAttachments []AttachmentError
 }
 
 func FetchPagesWithOptions(client *Client, location Location, options FetchOptions) (FetchResult, error) {
@@ -39,8 +45,7 @@ func FetchPagesWithOptions(client *Client, location Location, options FetchOptio
 	case "page":
 		return fetchPageTree(client, location.RootValue, options)
 	case "space":
-		pages, err := fetchSpaceTree(client, location.RootValue, options.Progress)
-		return FetchResult{Pages: pages}, err
+		return fetchSpaceTree(client, location.RootValue, options)
 	default:
 		return FetchResult{}, ErrUnsupportedRoot(location.RootType)
 	}

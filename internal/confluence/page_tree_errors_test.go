@@ -24,10 +24,10 @@ func TestPartialPageTreeStillFailsOnOtherHTTPErrors(t *testing.T) {
 		{"child list unauthorized", "/rest/api/content/2/child/page", 401},
 		{"child list rate limited", "/rest/api/content/2/child/page", 429},
 		{"child list server error", "/rest/api/content/2/child/page", 500},
-		{"attachment list forbidden", "/rest/api/content/2/child/attachment", 403},
-		{"attachment list missing", "/rest/api/content/2/child/attachment", 404},
-		{"download forbidden", "/download/8", 403},
-		{"download missing", "/download/8", 404},
+		{"attachment list unauthorized", "/rest/api/content/2/child/attachment", 401},
+		{"attachment list server error", "/rest/api/content/2/child/attachment", 500},
+		{"download unauthorized", "/download/8", 401},
+		{"download server error", "/download/8", 500},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			client, _ := pageTreeTestClient(t, test.path, test.status, "failure")

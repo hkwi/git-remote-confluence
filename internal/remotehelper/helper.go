@@ -180,6 +180,9 @@ func (h *helper) runImport(refs []string) error {
 	if len(result.UnavailableChildLists) > 0 {
 		h.reportWarning("partial clone: incomplete child lists for %d pages; descendants may be missing; subsequent fetches remain strict", len(result.UnavailableChildLists))
 	}
+	if len(result.UnavailableAttachments) > 0 {
+		h.reportWarning("imported %d pages without some attachments: Confluence refused the attachment list or download", len(result.UnavailableAttachments))
+	}
 	pages := result.Pages
 	if len(pages) == 0 {
 		return fmt.Errorf("Confluence returned no pages")
@@ -194,6 +197,7 @@ func (h *helper) runImport(refs []string) error {
 	if parent != "" {
 		h.reportProgress("chaining import of %s onto existing tip %s", branch, parent)
 	}
+	h.reportDroppedAttachments(parent, result)
 	stream := fastimport.BuildStreamWithParent(
 		branch,
 		fastimport.Location{RootType: location.RootType, RootValue: location.RootValue},
