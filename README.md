@@ -163,16 +163,16 @@ Confluence space.
 
 ### Unavailable child pages
 
-Initial clones of a page tree allow partial retrieval by default
+Clones and fetches of a page tree allow partial retrieval by default
 (`confluence.allowPartialClone=true`). To require every listed page to be
-retrieved, disable partial cloning explicitly:
+retrieved, disable partial retrieval explicitly:
 
 ```sh
 CONFLUENCE_PAT=... git -c confluence.allowPartialClone=false clone \
   'confluence::https://confluence.example.com/pages/viewpage.action?pageId=123456789'
 ```
 
-With partial cloning enabled, HTTP 403 and 404 responses when fetching a
+With partial retrieval enabled, HTTP 403 and 404 responses when fetching a
 descendant page's content are skipped, together with that page's subtree.
 Other pages and their attachments are still imported. Warnings identify each
 skipped page, its parent, and the HTTP status, and summarize the skipped count
@@ -193,13 +193,18 @@ Root page or root child-list failures, HTTP 401/429/5xx,
 invalid responses, and persistent network failures still abort the operation.
 Space imports also retain their existing strict behavior.
 
+A fetch applies the same rules, because content that became unavailable after
+the clone would otherwise fail every later fetch permanently. Pages that the
+previous import had committed and this one no longer contains are named in a
+warning that survives `--quiet`. The import proceeds as a fast-forward commit,
+so the earlier commit still holds the removed pages and attachments.
+
 The option accepts `true` or `false` and can also be set via, in precedence
 order, `CONFLUENCE_ALLOW_PARTIAL_CLONE`,
 `GIT_REMOTE_CONFLUENCE_ALLOW_PARTIAL_CLONE`, `remote.<name>.allowPartialClone`,
 `confluence.allowPartialClone`, or `remote.confluence.allowPartialClone`.
-It applies only when Git identifies the operation as cloning. Subsequent
-`git fetch` operations remain strict even if the setting persists, so a
-retrieval failure cannot replace an existing snapshot with a partial one.
+Setting it to `false` keeps both clone and fetch strict, so a retrieval failure
+cannot replace an existing snapshot with a partial one.
 
 ### Repeated fetch
 

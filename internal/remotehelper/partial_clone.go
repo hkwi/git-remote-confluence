@@ -11,15 +11,14 @@ func (h *helper) fetchOptions() (confluence.FetchOptions, error) {
 		Progress: h.reportProgress,
 		Warning:  h.reportWarning,
 	}
-	// Git sets the cloning option only for the initial clone. Even a persisted
-	// allowPartialClone setting must never relax a subsequent fetch.
-	if h.cloning {
-		allowed, err := confluence.ResolveAllowPartialClone(h.remoteName)
-		if err != nil {
-			return options, err
-		}
-		options.SkipUnavailableChildren = allowed
+	// Fetches honor the setting too: content that became unavailable after the
+	// clone would otherwise fail every later fetch permanently. Pages dropped
+	// relative to the previous import are reported instead.
+	allowed, err := confluence.ResolveAllowPartialClone(h.remoteName)
+	if err != nil {
+		return options, err
 	}
+	options.SkipUnavailableChildren = allowed
 	return options, nil
 }
 

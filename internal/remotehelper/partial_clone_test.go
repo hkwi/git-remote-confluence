@@ -5,25 +5,27 @@ import (
 	"testing"
 )
 
-func TestPartialCloneRequiresGitCloningOption(t *testing.T) {
-	t.Setenv("CONFLUENCE_ALLOW_PARTIAL_CLONE", "true")
+func TestPartialImportAppliesToFetchAsWellAsClone(t *testing.T) {
 	var output bytes.Buffer
-	h := &helper{out: &output}
 	for _, test := range []struct {
-		option string
-		allow  bool
+		setting string
+		option  string
+		allow   bool
 	}{
-		{"option check-connectivity true", false},
-		{"option cloning invalid", false},
-		{"option cloning true", true},
-		{"option cloning false", false},
+		{"true", "option cloning true", true},
+		{"true", "option cloning false", true},
+		{"false", "option cloning true", false},
+		{"false", "option cloning false", false},
 	} {
+		t.Setenv("CONFLUENCE_ALLOW_PARTIAL_CLONE", test.setting)
+		h := &helper{out: &output}
 		if err := h.handleOption(test.option); err != nil {
 			t.Fatal(err)
 		}
 		options, err := h.fetchOptions()
 		if err != nil || options.SkipUnavailableChildren != test.allow {
-			t.Fatalf("%s: allow partial = %v, err = %v", test.option, options.SkipUnavailableChildren, err)
+			t.Fatalf("setting %q with %s: allow partial = %v, err = %v",
+				test.setting, test.option, options.SkipUnavailableChildren, err)
 		}
 	}
 }

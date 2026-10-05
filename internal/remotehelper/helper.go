@@ -175,10 +175,10 @@ func (h *helper) runImport(refs []string) error {
 		return err
 	}
 	if len(result.SkippedPages) > 0 {
-		h.reportWarning("partial clone: skipped %d unavailable pages and their subtrees; subsequent fetches remain strict", len(result.SkippedPages))
+		h.reportWarning("partial import: skipped %d unavailable pages and their subtrees", len(result.SkippedPages))
 	}
 	if len(result.UnavailableChildLists) > 0 {
-		h.reportWarning("partial clone: incomplete child lists for %d pages; descendants may be missing; subsequent fetches remain strict", len(result.UnavailableChildLists))
+		h.reportWarning("partial import: incomplete child lists for %d pages; descendants may be missing", len(result.UnavailableChildLists))
 	}
 	if len(result.UnavailableAttachments) > 0 {
 		h.reportWarning("imported %d pages without some attachments: Confluence refused the attachment list or download", len(result.UnavailableAttachments))
@@ -197,7 +197,7 @@ func (h *helper) runImport(refs []string) error {
 	if parent != "" {
 		h.reportProgress("chaining import of %s onto existing tip %s", branch, parent)
 	}
-	h.reportDroppedAttachments(parent, result)
+	h.reportDroppedContent(parent, result)
 	stream := fastimport.BuildStreamWithParent(
 		branch,
 		fastimport.Location{RootType: location.RootType, RootValue: location.RootValue},

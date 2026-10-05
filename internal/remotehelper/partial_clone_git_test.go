@@ -114,8 +114,8 @@ func TestGitPartialCloneAndStrictFetch(t *testing.T) {
 				t.Fatalf("set persistent option: %v\n%s", err, output)
 			}
 			unavailable.Store(mode)
-			if output, err := runGit(full, "fetch", "origin"); err == nil || !strings.Contains(output, "HTTP 404") {
-				t.Fatalf("fetch should remain strict: %v\n%s", err, output)
+			if output, err := runGit(full, "-c", "confluence.allowPartialClone=false", "fetch", "origin"); err == nil || !strings.Contains(output, "HTTP 404") {
+				t.Fatalf("fetch with partial import disabled should fail: %v\n%s", err, output)
 			}
 			after, err := runGit(full, "show-ref")
 			if err != nil || after != before {
@@ -123,6 +123,20 @@ func TestGitPartialCloneAndStrictFetch(t *testing.T) {
 			}
 			if page := string(readCloneFile(t, full, "1", "3.md")); page != "<p>Keep this page.</p>" {
 				t.Fatalf("failed fetch changed existing page: %q", page)
+			}
+
+			output, err = runGit(full, "fetch", "--quiet", "origin")
+			if err != nil {
+				t.Fatalf("partial fetch: %v\n%s", err, output)
+			}
+			if name == "content" && !strings.Contains(output, "1 pages kept by the previous import are missing from this import: 1/3.md") {
+				t.Fatalf("quiet fetch hid the dropped page:\n%s", output)
+			}
+			if updated, err := runGit(full, "show-ref"); err != nil || updated == before {
+				t.Fatalf("partial fetch did not update refs: %v\n%s", err, updated)
+			}
+			if page, err := runGit(full, "show", "FETCH_HEAD^:1/3.md"); err != nil || !strings.Contains(page, "Keep this page.") {
+				t.Fatalf("earlier commit no longer retains the page: %v\n%s", err, page)
 			}
 		})
 	}
@@ -133,7 +147,7 @@ func checkPartialCloneFiles(t *testing.T, destination, output string, incomplete
 	rootMetadata := string(readCloneFile(t, destination, "1.yml"))
 	if incompleteChildren {
 		if !strings.Contains(output, "warning: incomplete child list for page 3 under parent 1: HTTP 404") ||
-			!strings.Contains(output, "partial clone: incomplete child lists for 1 pages") {
+			!strings.Contains(output, "partial import: incomplete child lists for 1 pages") {
 			t.Fatalf("quiet clone hid incomplete listing:\n%s", output)
 		}
 		if strings.Contains(rootMetadata, "skipped_children:") || !strings.Contains(rootMetadata, "children:\n  - \"3\"\n  - \"2\"\n") {
@@ -151,7 +165,7 @@ func checkPartialCloneFiles(t *testing.T, destination, output string, incomplete
 		}
 		return
 	}
-	if !strings.Contains(output, "warning: skipping page 3 under parent 1") || !strings.Contains(output, "partial clone: skipped 1") {
+	if !strings.Contains(output, "warning: skipping page 3 under parent 1") || !strings.Contains(output, "partial import: skipped 1") {
 		t.Fatalf("quiet clone hid missing content:\n%s", output)
 	}
 	if !strings.Contains(rootMetadata, "children:\n  - \"2\"\n") || !strings.Contains(rootMetadata, "skipped_children:\n  - \"3\"\n") {
