@@ -29,7 +29,10 @@ type PageRecord struct {
 	ChildIDs            []string
 	SkippedChildIDs     []string
 	ChildrenErrorStatus int
-	Version             confluencetypes.Version
+	// AttachmentsErrorStatus records that Confluence refused part or all of the
+	// attachment list, so the imported tree is knowingly incomplete.
+	AttachmentsErrorStatus int
+	Version                confluencetypes.Version
 	Links               map[string]string
 	StorageXML          string
 	PathDir             string
@@ -141,6 +144,9 @@ func PageMetadataYAML(location Location, page PageRecord) string {
 	}
 	if page.ChildrenErrorStatus != 0 {
 		root = append(root, yamlPair{"children_error", yamlMap{{"http_status", page.ChildrenErrorStatus}}})
+	}
+	if page.AttachmentsErrorStatus != 0 {
+		root = append(root, yamlPair{"attachments_error", yamlMap{{"http_status", page.AttachmentsErrorStatus}}})
 	}
 	return dumpYAML(compactMap(root))
 }

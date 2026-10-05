@@ -56,11 +56,17 @@ func fetchPageTree(client *Client, rootID string, options FetchOptions) (FetchRe
 
 		record := pageRecord(page, parentID, childIDs, pathDir, client.BaseURL)
 		record.ChildrenErrorStatus = childrenErrorStatus
-		attachments, err := fetchAttachments(client, record, options.Progress)
+		attachments, attachmentStatus, err := fetchAttachments(client, record, options)
 		if err != nil {
 			return err
 		}
 		record.Attachments = attachments
+		record.AttachmentsErrorStatus = attachmentStatus
+		if attachmentStatus != 0 {
+			result.UnavailableAttachments = append(result.UnavailableAttachments, AttachmentError{
+				PageID: pageID, StatusCode: attachmentStatus,
+			})
+		}
 		recordIndex := len(result.Pages)
 		result.Pages = append(result.Pages, record)
 

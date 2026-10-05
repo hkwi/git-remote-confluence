@@ -74,6 +74,13 @@ Attachments are downloaded below the page ID that owns them:
 Path separators and control characters in attachment names are replaced with
 underscores so an attachment cannot escape its page's `attachments` directory.
 
+Confluence grants attachment permissions separately from page permissions, so an
+HTTP 403 or 404 on an attachment listing or download never aborts the import,
+even on a strict `git fetch` or a space import. The page is imported without the
+unreadable attachments, its metadata records `attachments_error.http_status`, and
+warnings identify the page and summarize the affected count even with `--quiet`.
+HTTP 401/429/5xx and invalid responses still abort the operation.
+
 The `.md` file is stored in Git as Confluence storage-format XML. With the
 `git-confluence` filter configured, it is checked out as Markdown and converted
 back to storage XML on `git add`.
@@ -177,7 +184,7 @@ only the imported subset, not a complete list. Warnings identify the page and
 summarize incomplete listings even with `--quiet`. Unknown descendants are not
 reported as a zero-child result.
 
-Root page or root child-list failures, attachment failures, HTTP 401/429/5xx,
+Root page or root child-list failures, HTTP 401/429/5xx,
 invalid responses, and persistent network failures still abort the operation.
 Space imports also retain their existing strict behavior.
 
