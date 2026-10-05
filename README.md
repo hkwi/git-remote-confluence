@@ -81,6 +81,11 @@ unreadable attachments, its metadata records `attachments_error.http_status`, an
 warnings identify the page and summarize the affected count even with `--quiet`.
 HTTP 401/429/5xx and invalid responses still abort the operation.
 
+When a refused attachment was present in the previous import, the warning also
+names the dropped paths. The import still proceeds as a fast-forward commit, and
+the earlier commit retains the attachments, so revoked permissions are visible
+rather than silent.
+
 The `.md` file is stored in Git as Confluence storage-format XML. With the
 `git-confluence` filter configured, it is checked out as Markdown and converted
 back to storage XML on `git add`.

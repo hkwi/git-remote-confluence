@@ -197,6 +197,7 @@ func (h *helper) runImport(refs []string) error {
 	if parent != "" {
 		h.reportProgress("chaining import of %s onto existing tip %s", branch, parent)
 	}
+	h.reportDroppedAttachments(parent, result)
 	stream := fastimport.BuildStreamWithParent(
 		branch,
 		fastimport.Location{RootType: location.RootType, RootValue: location.RootValue},

@@ -52,6 +52,10 @@ func (p PageRecord) MetadataPath() string {
 	return joinPath(p.PathDir, p.PageID+".yml")
 }
 
+func (p PageRecord) AttachmentsDir() string {
+	return joinPath(p.PathDir, p.PageID, "attachments")
+}
+
 // BuildStream is a convenience wrapper that produces a root import commit
 // (no parent). Use BuildStreamWithParent to chain repeated imports onto the
 // previous local tip.
