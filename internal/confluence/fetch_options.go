@@ -28,11 +28,17 @@ type AttachmentError struct {
 	StatusCode int
 }
 
+type CommentError struct {
+	PageID     string
+	StatusCode int
+}
+
 type FetchResult struct {
 	Pages                  []fastimport.PageRecord
 	SkippedPages           []SkippedPage
 	UnavailableChildLists  []ChildListError
 	UnavailableAttachments []AttachmentError
+	UnavailableComments    []CommentError
 }
 
 func FetchPagesWithOptions(client *Client, location Location, options FetchOptions) (FetchResult, error) {

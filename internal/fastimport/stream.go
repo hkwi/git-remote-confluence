@@ -32,16 +32,31 @@ type PageRecord struct {
 	// AttachmentsErrorStatus records that Confluence refused part or all of the
 	// attachment list, so the imported tree is knowingly incomplete.
 	AttachmentsErrorStatus int
-	Version                confluencetypes.Version
+	// CommentsErrorStatus records that Confluence refused part or all of the
+	// comment list, so the imported comment thread is knowingly incomplete.
+	CommentsErrorStatus int
+	Version             confluencetypes.Version
 	Links               map[string]string
 	StorageXML          string
 	PathDir             string
 	Attachments         []AttachmentRecord
+	// Comments is the page's comment thread as a single YAML file.
+	Comments []CommentRecord
 }
 
 type AttachmentRecord struct {
 	Path string
 	Data []byte
+}
+
+type CommentRecord struct {
+	ID      string
+	Status  string
+	Version confluencetypes.Version
+	// Ancestors lists the ancestor comment IDs that precede this comment in
+	// the thread, excluding the owning page, so nested replies are preserved.
+	Ancestors []string
+	Body      string // storage-format XML
 }
 
 func (p PageRecord) ContentPath() string {
@@ -54,6 +69,12 @@ func (p PageRecord) MetadataPath() string {
 
 func (p PageRecord) AttachmentsDir() string {
 	return joinPath(p.PathDir, p.PageID, "attachments")
+}
+
+// CommentsPath returns the single file that holds the whole comment thread for
+// the page.
+func (p PageRecord) CommentsPath() string {
+	return joinPath(p.PathDir, p.PageID, "comments.yml")
 }
 
 // BuildStream is a convenience wrapper that produces a root import commit
@@ -96,6 +117,9 @@ func BuildStreamWithParent(branch string, location Location, pages []PageRecord,
 		for _, attachment := range page.Attachments {
 			appendFile(&out, attachment.Path, attachment.Data)
 		}
+		if len(page.Comments) > 0 {
+			appendFile(&out, page.CommentsPath(), []byte(CommentsYAML(page.Comments)))
+		}
 	}
 
 	out.WriteByte('\n')
@@ -117,6 +141,13 @@ func SelectBranch(refs []string) string {
 
 func PageMetadataYAML(location Location, page PageRecord) string {
 	hash := sha256.Sum256([]byte(page.StorageXML))
+	files := yamlMap{
+		{"storage_xml", page.ContentPath()},
+		{"metadata", page.MetadataPath()},
+	}
+	if len(page.Comments) > 0 {
+		files = append(files, yamlPair{"comments", page.CommentsPath()})
+	}
 	root := yamlMap{
 		{"page_id", page.PageID},
 		{"title", page.Title},
@@ -132,10 +163,7 @@ func PageMetadataYAML(location Location, page PageRecord) string {
 			{"by", userMap(page.Version.By)},
 		}},
 		{"links", stringMap(page.Links)},
-		{"files", yamlMap{
-			{"storage_xml", page.ContentPath()},
-			{"metadata", page.MetadataPath()},
-		}},
+		{"files", files},
 		{"sync", yamlMap{
 			{"source", "confluence"},
 			{"root_type", location.RootType},
@@ -152,7 +180,33 @@ func PageMetadataYAML(location Location, page PageRecord) string {
 	if page.AttachmentsErrorStatus != 0 {
 		root = append(root, yamlPair{"attachments_error", yamlMap{{"http_status", page.AttachmentsErrorStatus}}})
 	}
+	if page.CommentsErrorStatus != 0 {
+		root = append(root, yamlPair{"comments_error", yamlMap{{"http_status", page.CommentsErrorStatus}}})
+	}
 	return dumpYAML(compactMap(root))
+}
+
+// CommentsYAML renders the page's whole comment thread as one YAML document:
+// a list of comments, each preserving its Confluence id, status, version
+// (including author), ancestor comment ids, and storage-format body.
+func CommentsYAML(comments []CommentRecord) string {
+	list := make([]yamlMap, 0, len(comments))
+	for _, comment := range comments {
+		list = append(list, yamlMap{
+			{"id", comment.ID},
+			{"status", emptyAsNil(comment.Status)},
+			{"version", yamlMap{
+				{"number", comment.Version.Number},
+				{"when", emptyAsNil(comment.Version.When)},
+				{"minor_edit", comment.Version.MinorEdit},
+				{"message", emptyAsNil(comment.Version.Message)},
+				{"by", userMap(comment.Version.By)},
+			}},
+			{"ancestors", comment.Ancestors},
+			{"body", comment.Body},
+		})
+	}
+	return dumpYAML(yamlMap{{"comments", list}})
 }
 
 func appendFile(out *bytes.Buffer, path string, data []byte) {
@@ -240,6 +294,9 @@ func emitYAML(value any, lines *[]string, indent int) {
 			case []string:
 				*lines = append(*lines, prefix+pair.key+":")
 				emitYAML(child, lines, indent+2)
+			case []yamlMap:
+				*lines = append(*lines, prefix+pair.key+":")
+				emitYAMLList(child, lines, indent)
 			default:
 				*lines = append(*lines, prefix+pair.key+": "+yamlScalar(child))
 			}
@@ -254,6 +311,39 @@ func emitYAML(value any, lines *[]string, indent int) {
 		}
 	default:
 		*lines = append(*lines, prefix+yamlScalar(typed))
+	}
+}
+
+func emitYAMLList(list []yamlMap, lines *[]string, indent int) {
+	if len(list) == 0 {
+		*lines = append(*lines, strings.Repeat(" ", indent+2)+"[]")
+		return
+	}
+	for _, item := range list {
+		emitYAMLListItem(item, lines, indent+2)
+	}
+}
+
+func emitYAMLListItem(item yamlMap, lines *[]string, indent int) {
+	prefix := strings.Repeat(" ", indent)
+	for index, pair := range item {
+		keyPrefix := strings.Repeat(" ", indent+2)
+		if index == 0 {
+			keyPrefix = prefix + "- "
+		}
+		switch child := pair.value.(type) {
+		case yamlMap:
+			*lines = append(*lines, keyPrefix+pair.key+":")
+			emitYAML(child, lines, indent+4)
+		case []string:
+			*lines = append(*lines, keyPrefix+pair.key+":")
+			emitYAML(child, lines, indent+4)
+		case []yamlMap:
+			*lines = append(*lines, keyPrefix+pair.key+":")
+			emitYAMLList(child, lines, indent+2)
+		default:
+			*lines = append(*lines, keyPrefix+pair.key+": "+yamlScalar(child))
+		}
 	}
 }
 
@@ -292,6 +382,14 @@ func compactMap(value yamlMap) yamlMap {
 				continue
 			}
 		}
+		if nested, ok := pair.value.([]yamlMap); ok {
+			for i := range nested {
+				nested[i] = compactMap(nested[i])
+			}
+			if len(nested) == 0 {
+				continue
+			}
+		}
 		compacted = append(compacted, pair)
 	}
 	return compacted
@@ -307,6 +405,8 @@ func isEmpty(value any) bool {
 		return len(typed) == 0
 	case []string:
 		return false
+	case []yamlMap:
+		return len(typed) == 0
 	default:
 		return false
 	}
