@@ -61,9 +61,13 @@ func TestGitCloneFromMockConfluence(t *testing.T) {
 	}
 
 	comments := readCloneFile(t, destination, "1", "comments.yml")
+	// The top-level comment has no ancestors; the reply references its parent.
 	if !strings.Contains(string(comments), `- id: "20"`) ||
 		!strings.Contains(string(comments), "<p>コメントです。</p>") ||
-		!strings.Contains(string(comments), "display_name: \"Commenter\"") {
+		!strings.Contains(string(comments), "display_name: \"Commenter\"") ||
+		!strings.Contains(string(comments), `- id: "21"`) ||
+		!strings.Contains(string(comments), "<p>返信です。</p>") ||
+		!strings.Contains(string(comments), `- "20"`) {
 		t.Fatalf("unexpected comments.yml:\n%s", comments)
 	}
 
@@ -267,25 +271,38 @@ func mockConfluenceHandler(t *testing.T) http.Handler {
 			}}, "size": 1, "limit": 100})
 		case "/download/attachments/1/挿絵.png":
 			_, _ = w.Write([]byte("PNG DATA\x00"))
-		case "/rest/api/content/1/child/comment":
-			writeJSON(t, w, map[string]any{"results": []any{map[string]any{
-				"id":        "20",
-				"status":    "current",
-				"ancestors": []any{map[string]any{"id": "1"}},
-				"version": map[string]any{
-					"number": 3,
-					"when":   "2025-01-04T03:04:05.000Z",
-					"by":     map[string]any{"displayName": "Commenter"},
+		case "/rest/api/content/1/descendant/comment":
+			writeJSON(t, w, map[string]any{"results": []any{
+				map[string]any{
+					"id":        "20",
+					"status":    "current",
+					"ancestors": []any{},
+					"version": map[string]any{
+						"number": 3,
+						"when":   "2025-01-04T03:04:05.000Z",
+						"by":     map[string]any{"displayName": "Commenter"},
+					},
+					"body": map[string]any{"storage": map[string]any{"value": "<p>コメントです。</p>"}},
 				},
-				"body": map[string]any{"storage": map[string]any{"value": "<p>コメントです。</p>"}},
-			}}, "size": 1, "limit": 100})
+				map[string]any{
+					"id":        "21",
+					"status":    "current",
+					"ancestors": []any{map[string]any{"id": "20"}},
+					"version": map[string]any{
+						"number": 1,
+						"when":   "2025-01-05T03:04:05.000Z",
+						"by":     map[string]any{"displayName": "Commenter"},
+					},
+					"body": map[string]any{"storage": map[string]any{"value": "<p>返信です。</p>"}},
+				},
+			}, "size": 2, "limit": 100})
 		case "/rest/api/content/2":
 			writeJSON(t, w, pages["2"])
 		case "/rest/api/content/2/child/page":
 			writeJSON(t, w, map[string]any{"results": []any{}, "size": 0, "limit": 100})
 		case "/rest/api/content/2/child/attachment":
 			writeJSON(t, w, map[string]any{"results": []any{}, "size": 0, "limit": 100})
-		case "/rest/api/content/2/child/comment":
+		case "/rest/api/content/2/descendant/comment":
 			writeJSON(t, w, map[string]any{"results": []any{}, "size": 0, "limit": 100})
 		case "/rest/api/content":
 			if r.URL.Query().Get("spaceKey") != "ABC" {

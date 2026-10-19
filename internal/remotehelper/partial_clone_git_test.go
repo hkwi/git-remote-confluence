@@ -63,9 +63,9 @@ func TestGitPartialCloneAndStrictFetch(t *testing.T) {
 			writeJSON(t, w, map[string]any{"results": []any{map[string]any{
 				"id": "30", "title": "retained.txt", "_links": map[string]string{"download": "/download/30"},
 			}}})
-		case "/rest/api/content/3/child/comment":
+		case "/rest/api/content/3/descendant/comment":
 			writeJSON(t, w, map[string]any{"results": []any{}, "size": 0, "limit": 100})
-		case "/rest/api/content/2/child/comment":
+		case "/rest/api/content/2/descendant/comment":
 			writeJSON(t, w, map[string]any{"results": []any{}, "size": 0, "limit": 100})
 		case "/download/30":
 			_, _ = w.Write([]byte("retained attachment"))

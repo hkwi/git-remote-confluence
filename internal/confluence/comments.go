@@ -8,16 +8,15 @@ import (
 	"github.com/hkwi/git-remote-confluence/internal/confluencetypes"
 )
 
-// Comment is a Confluence comment on a page. Comments are fetched through the
-// same /child endpoint family as attachments, and their storage-format body is
-// preserved so the thread can be revisited or pushed later without lossy
-// conversion.
+// Comment is a Confluence comment on a page. The whole comment tree (top-level
+// and replies) is fetched through the /descendant/comment endpoint, and each
+// comment's storage-format body is preserved so the thread can be revisited or
+// pushed later without lossy conversion.
 type Comment struct {
 	ID        string                  `json:"id"`
 	Status    string                  `json:"status"`
 	Version   confluencetypes.Version `json:"version"`
 	Ancestors []Ancestor              `json:"ancestors"`
-	Container map[string]string       `json:"container"`
 	Body      Body                    `json:"body"`
 }
 
@@ -26,9 +25,10 @@ type commentListResponse struct {
 	Links   map[string]string `json:"_links"`
 }
 
-// FetchComments returns the comments on pageID ordered by their Confluence
-// creation order. Ancestors of a comment include the owning page and any
-// parent comment, which is enough to reconstruct the thread.
+// FetchComments returns every comment under pageID, including replies, ordered
+// deterministically by comment id. Each comment's ancestors carry the full
+// reply chain as parent comment ids (nearest parent first; the owning page is
+// not included), which is enough to reconstruct the thread.
 func (c *Client) FetchComments(pageID string) ([]Comment, error) {
 	var comments []Comment
 	start := 0
@@ -36,12 +36,12 @@ func (c *Client) FetchComments(pageID string) ([]Comment, error) {
 
 	for {
 		values := url.Values{}
-		values.Set("expand", "body.storage,version,version.by,ancestors,container")
+		values.Set("expand", "body.storage,version,version.by,ancestors")
 		values.Set("start", strconv.Itoa(start))
 		values.Set("limit", strconv.Itoa(limit))
 
 		var response commentListResponse
-		path := c.apiPath("content/" + url.PathEscape(pageID) + "/child/comment")
+		path := c.apiPath("content/" + url.PathEscape(pageID) + "/descendant/comment")
 		if err := c.getJSON(path, values, &response); err != nil {
 			return comments, err
 		}

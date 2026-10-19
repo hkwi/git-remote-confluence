@@ -82,9 +82,11 @@ that owns it:
 123456789/123456790/comments.yml
 ```
 
-The `.yml` file lists the page's comments in Confluence order, preserving each
-comment's id, status, version (including author), reply-chain ancestor comment
-ids, and storage-format body. The body XML is retained verbatim so a thread can
+The `.yml` file lists the page's whole comment tree, including replies, sorted
+deterministically by comment id. Each comment preserves its id, status, version
+(including author), and storage-format body, plus the reply-chain ancestor
+comment ids in `ancestors` (nearest parent first, page excluded) so a nested
+thread can be reconstructed. The body XML is retained verbatim so a thread can
 be revisited or pushed later without lossy conversion; no Markdown
 clean/smudge conversion is applied because several comments share one file. A
 page without comments has no `comments.yml`.

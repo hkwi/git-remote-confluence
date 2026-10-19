@@ -200,9 +200,14 @@ func fetchAttachments(client *Client, page fastimport.PageRecord, options FetchO
 	return result, errorStatus, nil
 }
 
-// fetchComments returns the page's comment thread. A comment listing or read is
-// treated like an unavailable attachment when Confluence refuses it: the page
-// is imported with whatever comments were readable rather than aborting.
+// fetchComments returns the page's full comment tree, including replies. A
+// comment listing or read is treated like an unavailable attachment when
+// Confluence refuses it: the page is imported with whatever comments were
+// readable rather than aborting.
+//
+// Each comment's Confluence ancestors carry the whole reply chain as parent
+// comment ids (nearest parent first); the owning page is not part of the
+// chain, so the ancestor ids are kept verbatim.
 func fetchComments(client *Client, page fastimport.PageRecord, options FetchOptions) ([]fastimport.CommentRecord, int, error) {
 	progress := options.Progress
 	comments, err := client.FetchComments(page.PageID)
@@ -224,9 +229,7 @@ func fetchComments(client *Client, page fastimport.PageRecord, options FetchOpti
 		}
 		var ancestors []string
 		for _, ancestor := range comment.Ancestors {
-			// The first ancestor is normally the owning page, not a comment;
-			// keep only the comment ancestors that form the reply chain.
-			if ancestor.ID != "" && ancestor.ID != page.PageID {
+			if ancestor.ID != "" {
 				ancestors = append(ancestors, ancestor.ID)
 			}
 		}
