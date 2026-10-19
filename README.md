@@ -1,9 +1,9 @@
 # git-remote-confluence
 
 `git-remote-confluence` is a Git remote helper that treats a Confluence page
-tree or space as a Git remote. It imports Confluence storage-format XML and
-attachments into a Git repository and can push committed body updates for
-existing pages back to Confluence.
+tree or space as a Git remote. It imports Confluence storage-format XML,
+attachments, and page comments into a Git repository and can push committed
+body updates for existing pages back to Confluence.
 
 The helper is intentionally narrow: Confluence remains the system that owns page
 identity, hierarchy, version numbers, and storage-format XML. Git becomes the
@@ -73,6 +73,23 @@ Attachments are downloaded below the page ID that owns them:
 
 Path separators and control characters in attachment names are replaced with
 underscores so an attachment cannot escape its page's `attachments` directory.
+
+Each page's comment thread is imported as a single YAML file below the page ID
+that owns it:
+
+```text
+123456789/comments.yml
+123456789/123456790/comments.yml
+```
+
+The `.yml` file lists the page's whole comment tree, including replies, sorted
+deterministically by comment id. Each comment preserves its id, status, version
+(including author), and storage-format body, plus the reply-chain ancestor
+comment ids in `ancestors` (nearest parent first, page excluded) so a nested
+thread can be reconstructed. The body XML is retained verbatim so a thread can
+be revisited or pushed later without lossy conversion; no Markdown
+clean/smudge conversion is applied because several comments share one file. A
+page without comments has no `comments.yml`.
 
 Confluence grants attachment permissions separately from page permissions, so an
 HTTP 403 or 404 on an attachment listing or download never aborts the import,

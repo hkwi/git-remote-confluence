@@ -67,6 +67,17 @@ func fetchPageTree(client *Client, rootID string, options FetchOptions) (FetchRe
 				PageID: pageID, StatusCode: attachmentStatus,
 			})
 		}
+		comments, commentStatus, err := fetchComments(client, record, options)
+		if err != nil {
+			return err
+		}
+		record.Comments = comments
+		record.CommentsErrorStatus = commentStatus
+		if commentStatus != 0 {
+			result.UnavailableComments = append(result.UnavailableComments, CommentError{
+				PageID: pageID, StatusCode: commentStatus,
+			})
+		}
 		recordIndex := len(result.Pages)
 		result.Pages = append(result.Pages, record)
 

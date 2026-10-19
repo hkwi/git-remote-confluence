@@ -111,6 +111,17 @@ func fetchSpaceTree(client *Client, spaceKey string, options FetchOptions) (Fetc
 				PageID: record.PageID, StatusCode: attachmentStatus,
 			})
 		}
+		comments, commentStatus, err := fetchComments(client, record, options)
+		if err != nil {
+			return err
+		}
+		record.Comments = comments
+		record.CommentsErrorStatus = commentStatus
+		if commentStatus != 0 {
+			result.UnavailableComments = append(result.UnavailableComments, CommentError{
+				PageID: record.PageID, StatusCode: commentStatus,
+			})
+		}
 		records = append(records, record)
 
 		childPathDir := joinPath(pathDir, record.PageID)
@@ -185,6 +196,50 @@ func fetchAttachments(client *Client, page fastimport.PageRecord, options FetchO
 			Data: data,
 		})
 		report(progress, "downloaded attachment %s %s (%d bytes)", attachment.ID, attachment.Title, len(data))
+	}
+	return result, errorStatus, nil
+}
+
+// fetchComments returns the page's full comment tree, including replies. A
+// comment listing or read is treated like an unavailable attachment when
+// Confluence refuses it: the page is imported with whatever comments were
+// readable rather than aborting.
+//
+// Each comment's Confluence ancestors carry the whole reply chain as parent
+// comment ids (nearest parent first); the owning page is not part of the
+// chain, so the ancestor ids are kept verbatim.
+func fetchComments(client *Client, page fastimport.PageRecord, options FetchOptions) ([]fastimport.CommentRecord, int, error) {
+	progress := options.Progress
+	comments, err := client.FetchComments(page.PageID)
+	if err != nil {
+		status := unavailableContentStatus(err)
+		if status == 0 {
+			return nil, 0, fmt.Errorf("fetch comments for page %s: %w", page.PageID, err)
+		}
+		report(options.Warning, "comment list unavailable for page %s: HTTP %d; importing the page without comments", page.PageID, status)
+		return nil, status, nil
+	}
+	report(progress, "page %s has %d comments", page.PageID, len(comments))
+
+	errorStatus := 0
+	result := make([]fastimport.CommentRecord, 0, len(comments))
+	for _, comment := range comments {
+		if comment.ID == "" {
+			continue
+		}
+		var ancestors []string
+		for _, ancestor := range comment.Ancestors {
+			if ancestor.ID != "" {
+				ancestors = append(ancestors, ancestor.ID)
+			}
+		}
+		result = append(result, fastimport.CommentRecord{
+			ID:        comment.ID,
+			Status:    comment.Status,
+			Version:   comment.Version,
+			Ancestors: ancestors,
+			Body:      comment.Body.Storage.Value,
+		})
 	}
 	return result, errorStatus, nil
 }

@@ -55,20 +55,27 @@ func TestPartialPageTreeSkipsOnlyUnavailableSubtrees(t *testing.T) {
 // the rest of the import without a live Confluence service.
 func pageTreeTestClient(t *testing.T, failurePath string, status int, body string) (*Client, *[]string) {
 	t.Helper()
+	// Comments use the /descendant/comment endpoint, mirroring the real
+	// Confluence API: a top-level comment has no ancestors, and a reply lists
+	// its parent comment chain (nearest parent first, page excluded).
 	responses := map[string]string{
-		"/rest/api/content/1":                  `{"id":"1"}`,
-		"/rest/api/content/1/child/page":       `{"results":[{"id":"2"},{"id":"3"}]}`,
-		"/rest/api/content/1/child/attachment": `{"results":[]}`,
-		"/rest/api/content/2":                  `{"id":"2","version":{"number":1},"body":{"storage":{"value":"<p>Known page.</p>"}}}`,
-		"/rest/api/content/2/child/page":       `{"results":[{"id":"4"}]}`,
-		"/rest/api/content/2/child/attachment": `{"results":[]}`,
-		"/rest/api/content/3":                  `{"id":"3"}`,
-		"/rest/api/content/3/child/page":       `{"results":[]}`,
-		"/rest/api/content/3/child/attachment": `{"results":[{"id":"8","title":"file.txt","_links":{"download":"/download/8"}}]}`,
-		"/rest/api/content/4":                  `{"id":"4"}`,
-		"/rest/api/content/4/child/page":       `{"results":[]}`,
-		"/rest/api/content/4/child/attachment": `{"results":[]}`,
-		"/download/8":                          "attachment bytes",
+		"/rest/api/content/1":                    `{"id":"1"}`,
+		"/rest/api/content/1/child/page":         `{"results":[{"id":"2"},{"id":"3"}]}`,
+		"/rest/api/content/1/child/attachment":   `{"results":[]}`,
+		"/rest/api/content/1/descendant/comment": `{"results":[{"id":"10","version":{"number":1},"ancestors":[],"body":{"storage":{"value":"<p>Top comment.</p>"}}},{"id":"11","version":{"number":1},"ancestors":[{"id":"10"}],"body":{"storage":{"value":"<p>Reply to 10.</p>"}}}]}`,
+		"/rest/api/content/2":                    `{"id":"2","version":{"number":1},"body":{"storage":{"value":"<p>Known page.</p>"}}}`,
+		"/rest/api/content/2/child/page":         `{"results":[{"id":"4"}]}`,
+		"/rest/api/content/2/child/attachment":   `{"results":[]}`,
+		"/rest/api/content/2/descendant/comment": `{"results":[]}`,
+		"/rest/api/content/3":                    `{"id":"3"}`,
+		"/rest/api/content/3/child/page":         `{"results":[]}`,
+		"/rest/api/content/3/child/attachment":   `{"results":[{"id":"8","title":"file.txt","_links":{"download":"/download/8"}}]}`,
+		"/rest/api/content/3/descendant/comment": `{"results":[{"id":"30","version":{"number":1},"ancestors":[],"body":{"storage":{"value":"<p>A.</p>"}}},{"id":"31","version":{"number":1},"ancestors":[{"id":"30"}],"body":{"storage":{"value":"<p>B.</p>"}}},{"id":"32","version":{"number":1},"ancestors":[{"id":"31"},{"id":"30"}],"body":{"storage":{"value":"<p>C.</p>"}}}]}`,
+		"/rest/api/content/4":                    `{"id":"4"}`,
+		"/rest/api/content/4/child/page":         `{"results":[]}`,
+		"/rest/api/content/4/child/attachment":   `{"results":[]}`,
+		"/rest/api/content/4/descendant/comment": `{"results":[]}`,
+		"/download/8":                            "attachment bytes",
 	}
 	client := NewClient("https://example.test", "token")
 	var requests []string
